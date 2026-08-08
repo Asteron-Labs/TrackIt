@@ -5,7 +5,7 @@
     system-ui,
     -apple-system,
     BlinkMacSystemFont,
-    'Segoe UI',
+    "Segoe UI",
     sans-serif;
   color: #17231e;
   background: #f4f7f5;
@@ -41,7 +41,12 @@ button {
   place-items: center;
   padding: 24px;
   background:
-    radial-gradient(circle at top left, rgba(80, 151, 117, 0.22), transparent 34%), #f4f7f5;
+    radial-gradient(
+      circle at top left,
+      rgba(80, 151, 117, 0.22),
+      transparent 34%
+    ),
+    #f4f7f5;
 }
 
 .login-panel {
@@ -271,7 +276,9 @@ textarea {
 
 .users-page,
 .teams-page,
-.team-details-page {
+.team-details-page,
+.goals-page,
+.goal-details-page {
   min-width: 0;
   padding: clamp(36px, 5vw, 72px);
 }
@@ -291,7 +298,8 @@ textarea {
 }
 
 .users-layout,
-.teams-layout {
+.teams-layout,
+.goals-layout {
   display: grid;
   grid-template-columns: minmax(280px, 360px) minmax(0, 1fr);
   align-items: start;
@@ -316,12 +324,14 @@ textarea {
 }
 
 .user-form,
-.team-form {
+.team-form,
+.goal-form {
   gap: 9px;
 }
 
 .user-form-panel,
-.team-form-panel {
+.team-form-panel,
+.goal-form-panel {
   position: sticky;
   top: 24px;
 }
@@ -355,7 +365,8 @@ textarea {
 
 .users-table,
 .teams-table,
-.members-table {
+.members-table,
+.goals-table {
   width: 100%;
   border-collapse: collapse;
   font-size: 14px;
@@ -366,7 +377,9 @@ textarea {
 .teams-table th,
 .teams-table td,
 .members-table th,
-.members-table td {
+.members-table td,
+.goals-table th,
+.goals-table td {
   padding: 13px 12px;
   text-align: left;
   border-bottom: 1px solid #e3ebe6;
@@ -374,7 +387,8 @@ textarea {
 
 .users-table th,
 .teams-table th,
-.members-table th {
+.members-table th,
+.goals-table th {
   color: #506159;
   font-size: 12px;
   letter-spacing: 0.06em;
@@ -383,11 +397,13 @@ textarea {
 
 .users-table tbody tr:last-child td,
 .teams-table tbody tr:last-child td,
-.members-table tbody tr:last-child td {
+.members-table tbody tr:last-child td,
+.goals-table tbody tr:last-child td {
   border-bottom: 0;
 }
 
 .team-link,
+.goal-link,
 .back-link {
   color: #1f6848;
   font-weight: 750;
@@ -395,6 +411,7 @@ textarea {
 }
 
 .team-link:hover,
+.goal-link:hover,
 .back-link:hover {
   text-decoration: underline;
 }
@@ -426,6 +443,125 @@ textarea {
 .person-summary span {
   color: #64736b;
   font-size: 14px;
+}
+
+.team-heading-actions {
+  display: grid;
+  gap: 10px;
+}
+
+.secondary-link {
+  padding: 10px 14px;
+  color: #1f6848;
+  background: #ffffff;
+  border: 1px solid #bcd1c4;
+  border-radius: 9px;
+  font-weight: 750;
+  text-align: center;
+  text-decoration: none;
+}
+
+.secondary-link:hover {
+  background: #edf6f0;
+}
+
+.team-goal-selector {
+  display: grid;
+  grid-template-columns: auto minmax(220px, 340px);
+  align-items: center;
+  justify-content: end;
+  gap: 12px;
+  margin-bottom: 24px;
+}
+
+.team-goal-selector label {
+  margin: 0;
+}
+
+.goal-date-fields {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+}
+
+.goal-date-fields label {
+  display: block;
+  margin-bottom: 10px;
+}
+
+.goal-status-summary {
+  display: inline-flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 7px;
+}
+
+.goal-status-badge,
+.overdue-marker {
+  display: inline-block;
+  padding: 5px 8px;
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 750;
+  white-space: nowrap;
+}
+
+.goal-status-planned {
+  color: #44564d;
+  background: #e9eeeb;
+}
+
+.goal-status-active {
+  color: #18563b;
+  background: #e2f3e8;
+}
+
+.goal-status-completed {
+  color: #225d42;
+  background: #cfe8d8;
+}
+
+.goal-status-cancelled {
+  color: #6c5b55;
+  background: #eee8e5;
+}
+
+.overdue-marker {
+  color: #8b2020;
+  background: #fff0f0;
+}
+
+.goal-details-heading {
+  align-items: end;
+}
+
+.goal-details-heading > .goal-status-summary {
+  justify-content: flex-end;
+}
+
+.goal-metadata {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(150px, 1fr));
+  gap: 16px;
+  margin-bottom: 24px;
+}
+
+.goal-metadata-card {
+  display: grid;
+  gap: 8px;
+}
+
+.goal-metadata-card span {
+  color: #64736b;
+  font-size: 13px;
+}
+
+.goal-metadata-card strong {
+  font-size: 18px;
+}
+
+.goal-tasks-shell {
+  min-height: 220px;
 }
 
 .team-details-grid {
@@ -501,13 +637,19 @@ textarea {
 @media (max-width: 1080px) {
   .users-layout,
   .teams-layout,
+  .goals-layout,
   .team-details-grid {
     grid-template-columns: 1fr;
   }
 
   .user-form-panel,
-  .team-form-panel {
+  .team-form-panel,
+  .goal-form-panel {
     position: static;
+  }
+
+  .goal-metadata {
+    grid-template-columns: repeat(2, minmax(150px, 1fr));
   }
 }
 
@@ -534,13 +676,30 @@ textarea {
 
   .users-page,
   .teams-page,
-  .team-details-page {
+  .team-details-page,
+  .goals-page,
+  .goal-details-page {
     padding: 36px 20px;
   }
 
   .team-details-heading {
     align-items: stretch;
     flex-direction: column;
+  }
+
+  .goal-details-heading {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .goal-details-heading > .goal-status-summary {
+    justify-content: flex-start;
+  }
+
+  .team-goal-selector,
+  .goal-date-fields,
+  .goal-metadata {
+    grid-template-columns: 1fr;
   }
 
   .capacity-summary {
