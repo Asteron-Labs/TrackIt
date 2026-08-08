@@ -14,7 +14,10 @@ manually controlled lifecycle status.
   Employees have read-only access to their team's goals.
 - Team scope is authorized through `ScopeService`, and returned goal queries include the
   authorized team id.
-- Progress is derived on read. Until tasks exist, the API returns `null`, meaning "No tasks yet."
+- Progress is the percentage of tasks in `DONE`, counted rather than weighted by estimated hours.
+- Progress and status counts are derived on read and never stored.
+- A goal with no tasks returns `0%` with `noTasksYet: true` so clients show an explanatory state.
+- Goal lists load status counts for every returned goal in one grouped query.
 
 ## Public service methods
 
@@ -23,3 +26,5 @@ manually controlled lifecycle status.
   status filter.
 - `GoalService.getGoal(goalId, caller)` returns a goal through a team-scoped query.
 - `GoalService.updateGoal(goalId, dto, caller)` updates editable goal fields and rechecks dates.
+- `GoalService.calculateProgress(goalId)` returns progress and the task-status breakdown from one
+  grouped task count.

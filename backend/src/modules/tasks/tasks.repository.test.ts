@@ -51,6 +51,10 @@ function createRepository(rawRows: Array<Record<string, unknown>> = [], entities
       groupClauses.push(column);
       return this;
     },
+    addGroupBy(column: string) {
+      groupClauses.push(column);
+      return this;
+    },
     async getOne() {
       return null;
     },
@@ -218,24 +222,66 @@ test('updateStatus persists and returns the updated task', async () => {
 
 test('countByGoalAndStatus returns all statuses from one grouped query', async () => {
   const { repository, whereClauses, selectedColumns, groupClauses } = createRepository([
-    { status: TaskStatus.TODO, count: '3' },
-    { status: TaskStatus.DONE, count: '1' },
+    { goalId: 'goal-id', status: TaskStatus.TODO, count: '3' },
+    { goalId: 'goal-id', status: TaskStatus.DONE, count: '1' },
   ]);
 
   const counts = await repository.countByGoalAndStatus('goal-id');
 
   assert.deepEqual(selectedColumns, [
+    ['task.goal_id', 'goalId'],
     ['task.status', 'status'],
     ['COUNT(task.id)', 'count'],
   ]);
   assert.deepEqual(whereClauses, [
-    { clause: 'task.goal_id = :goalId', parameters: { goalId: 'goal-id' } },
+    {
+      clause: 'task.goal_id IN (:...goalIds)',
+      parameters: { goalIds: ['goal-id'] },
+    },
   ]);
-  assert.deepEqual(groupClauses, ['task.status']);
+  assert.deepEqual(groupClauses, ['task.goal_id', 'task.status']);
   assert.deepEqual(counts, {
     TODO: 3,
     IN_PROGRESS: 0,
     BLOCKED: 0,
     DONE: 1,
   });
+});
+
+test('countByGoalIdsAndStatus returns keyed counts for multiple goals in one query', async () => {
+  const { repository, whereClauses } = createRepository([
+    { goalId: 'first-goal', status: TaskStatus.DONE, count: '2' },
+    { goalId: 'second-goal', status: TaskStatus.BLOCKED, count: '1' },
+  ]);
+
+  const counts = await repository.countByGoalIdsAndStatus(['first-goal', 'second-goal']);
+
+  assert.deepEqual(whereClauses, [
+    {
+      clause: 'task.goal_id IN (:...goalIds)',
+      parameters: { goalIds: ['first-goal', 'second-goal'] },
+    },
+  ]);
+  assert.deepEqual(counts.get('first-goal'), {
+    TODO: 0,
+    IN_PROGRESS: 0,
+    BLOCKED: 0,
+    DONE: 2,
+  });
+  assert.deepEqual(counts.get('second-goal'), {
+    TODO: 0,
+    IN_PROGRESS: 0,
+    BLOCKED: 1,
+    DONE: 0,
+  });
+});
+
+test('countByGoalIdsAndStatus skips the query for an empty goal list', async () => {
+  const { repository, selectedColumns, whereClauses } = createRepository();
+
+  const counts = await repository.countByGoalIdsAndStatus([]);
+
+  assert.equal(counts.size, 0);
+  assert.deepEqual(selectedColumns, []);
+  assert.deepEqual(whereClauses, []);
 });

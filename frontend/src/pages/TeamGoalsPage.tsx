@@ -3,6 +3,8 @@ import { Link, useSearchParams } from "react-router-dom";
 import { apiRequest } from "../api/client";
 import { useAuth } from "../auth/AuthContext";
 import { GoalCreationForm } from "../components/GoalCreationForm";
+import { getGoalDeadlineDisplay } from "../components/goal-display";
+import { GoalProgress } from "../components/GoalProgress";
 import { GoalStatusBadge } from "../components/GoalStatusBadge";
 import { Navigation } from "../components/Navigation";
 import type { Goal, GoalsResponse } from "../types/goal";
@@ -100,6 +102,7 @@ export function TeamGoalsPage() {
     user?.role === "SUPER_ADMIN"
       ? "No teams have been created yet."
       : "You are not currently assigned to a team.";
+  const today = new Date().toISOString().slice(0, 10);
 
   return (
     <div className="app-shell">
@@ -189,30 +192,52 @@ export function TeamGoalsPage() {
                         </tr>
                       </thead>
                       <tbody>
-                        {goals.map((goal) => (
-                          <tr key={goal.id}>
-                            <td>
-                              <Link
-                                className="goal-link"
-                                to={`/goals/${goal.id}`}
-                              >
-                                {goal.title}
-                              </Link>
-                            </td>
-                            <td>{goal.deadline}</td>
-                            <td>
-                              <GoalStatusBadge
-                                status={goal.status}
-                                deadline={goal.deadline}
-                              />
-                            </td>
-                            <td>
-                              {goal.progress === null
-                                ? "No tasks yet"
-                                : `${Math.round(goal.progress)}%`}
-                            </td>
-                          </tr>
-                        ))}
+                        {goals.map((goal) => {
+                          const deadlineDisplay = getGoalDeadlineDisplay(
+                            goal.deadline,
+                            goal.status,
+                            today,
+                          );
+
+                          return (
+                            <tr key={goal.id}>
+                              <td>
+                                <Link
+                                  className="goal-link"
+                                  to={`/goals/${goal.id}`}
+                                >
+                                  {goal.title}
+                                </Link>
+                              </td>
+                              <td>
+                                <span>{goal.deadline}</span>
+                                <small
+                                  className={
+                                    deadlineDisplay.overdue
+                                      ? "goal-deadline-text overdue"
+                                      : "goal-deadline-text"
+                                  }
+                                >
+                                  {deadlineDisplay.text}
+                                </small>
+                              </td>
+                              <td>
+                                <GoalStatusBadge
+                                  status={goal.status}
+                                  deadline={goal.deadline}
+                                />
+                              </td>
+                              <td className="goal-progress-cell">
+                                <GoalProgress
+                                  progress={goal.progress}
+                                  noTasksYet={goal.noTasksYet}
+                                  breakdown={goal.taskStatusBreakdown}
+                                  compact
+                                />
+                              </td>
+                            </tr>
+                          );
+                        })}
                       </tbody>
                     </table>
                   </div>

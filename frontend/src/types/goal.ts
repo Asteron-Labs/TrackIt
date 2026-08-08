@@ -1,6 +1,14 @@
 export type GoalStatus = "PLANNED" | "ACTIVE" | "COMPLETED" | "CANCELLED";
 export type GoalImportance = "LOW" | "MEDIUM" | "HIGH";
 
+export interface GoalTaskStatusBreakdown {
+  total: number;
+  todo: number;
+  inProgress: number;
+  blocked: number;
+  done: number;
+}
+
 export interface Goal {
   id: string;
   teamId: string;
@@ -11,7 +19,9 @@ export interface Goal {
   status: GoalStatus;
   importance: GoalImportance;
   createdById: string;
-  progress: number | null;
+  progress: number;
+  noTasksYet: boolean;
+  taskStatusBreakdown: GoalTaskStatusBreakdown;
   createdAt: string;
   updatedAt: string;
 }

@@ -3,6 +3,8 @@ import test from 'node:test';
 import { ScopeService } from '../../common/authorization/scope.service';
 import { ForbiddenError, NotFoundError, ValidationError } from '../../common/errors';
 import { AuthenticatedUser } from '../../common/middleware/authenticate';
+import { TaskStatus } from '../tasks/tasks.entity';
+import { TaskRepository, TaskStatusCounts } from '../tasks/tasks.repository';
 import { UserRole } from '../users/users.entity';
 import { Goal, GoalImportance, GoalStatus } from './goals.entity';
 import {
@@ -41,8 +43,26 @@ function caller(role: UserRole): AuthenticatedUser {
 function createService(
   goalRepository: Partial<GoalRepository>,
   scopeService: Partial<ScopeService> = {},
+  taskRepository: Partial<TaskRepository> = {},
 ): GoalService {
-  return new GoalService(goalRepository as GoalRepository, scopeService as ScopeService);
+  const emptyCounts: TaskStatusCounts = {
+    [TaskStatus.TODO]: 0,
+    [TaskStatus.IN_PROGRESS]: 0,
+    [TaskStatus.BLOCKED]: 0,
+    [TaskStatus.DONE]: 0,
+  };
+  const taskRepositoryWithDefaults = {
+    countByGoalAndStatus: async () => ({ ...emptyCounts }),
+    countByGoalIdsAndStatus: async (goalIds: string[]) =>
+      new Map(goalIds.map((goalId) => [goalId, { ...emptyCounts }])),
+    ...taskRepository,
+  } as TaskRepository;
+
+  return new GoalService(
+    goalRepository as GoalRepository,
+    taskRepositoryWithDefaults,
+    scopeService as ScopeService,
+  );
 }
 
 test('createGoal checks Team Lead scope and creates a planned goal', async () => {
@@ -85,7 +105,15 @@ test('createGoal checks Team Lead scope and creates a planned goal', async () =>
     importance: GoalImportance.HIGH,
     createdById: teamLead.userId,
   });
-  assert.equal(goal.progress, null);
+  assert.equal(goal.progress, 0);
+  assert.equal(goal.noTasksYet, true);
+  assert.deepEqual(goal.taskStatusBreakdown, {
+    total: 0,
+    todo: 0,
+    inProgress: 0,
+    blocked: 0,
+    done: 0,
+  });
 });
 
 test('createGoal allows a Super Admin to manage any team without a lead assertion', async () => {
@@ -175,6 +203,89 @@ test('listTeamGoals checks Employee membership and forwards the status filter', 
   assert.equal(checkedMemberId, employee.userId);
   assert.deepEqual(receivedFilter, { status: GoalStatus.ACTIVE });
   assert.equal(goals[0].status, GoalStatus.ACTIVE);
+});
+
+test('listTeamGoals loads progress for every goal in one bulk count', async () => {
+  const secondGoalId = '22222222-2222-4222-8222-222222222222';
+  let receivedGoalIds: string[] | undefined;
+  const goalService = createService(
+    {
+      findByTeam: async () => [storedGoal(), storedGoal({ id: secondGoalId })],
+    },
+    {},
+    {
+      countByGoalIdsAndStatus: async (goalIds) => {
+        receivedGoalIds = goalIds;
+        return new Map([
+          [
+            GOAL_ID,
+            {
+              [TaskStatus.TODO]: 1,
+              [TaskStatus.IN_PROGRESS]: 1,
+              [TaskStatus.BLOCKED]: 0,
+              [TaskStatus.DONE]: 2,
+            },
+          ],
+          [
+            secondGoalId,
+            {
+              [TaskStatus.TODO]: 0,
+              [TaskStatus.IN_PROGRESS]: 0,
+              [TaskStatus.BLOCKED]: 0,
+              [TaskStatus.DONE]: 0,
+            },
+          ],
+        ]);
+      },
+    },
+  );
+
+  const goals = await goalService.listTeamGoals(TEAM_ID, {}, caller(UserRole.SUPER_ADMIN));
+
+  assert.deepEqual(receivedGoalIds, [GOAL_ID, secondGoalId]);
+  assert.equal(goals[0].progress, 50);
+  assert.equal(goals[0].noTasksYet, false);
+  assert.deepEqual(goals[0].taskStatusBreakdown, {
+    total: 4,
+    todo: 1,
+    inProgress: 1,
+    blocked: 0,
+    done: 2,
+  });
+  assert.equal(goals[1].progress, 0);
+  assert.equal(goals[1].noTasksYet, true);
+});
+
+test('calculateProgress handles empty, partial, and completed goals', async () => {
+  let counts: TaskStatusCounts = {
+    [TaskStatus.TODO]: 0,
+    [TaskStatus.IN_PROGRESS]: 0,
+    [TaskStatus.BLOCKED]: 0,
+    [TaskStatus.DONE]: 0,
+  };
+  const goalService = createService({}, {}, { countByGoalAndStatus: async () => counts });
+
+  assert.deepEqual(await goalService.calculateProgress(GOAL_ID), {
+    progress: 0,
+    noTasksYet: true,
+    taskStatusBreakdown: { total: 0, todo: 0, inProgress: 0, blocked: 0, done: 0 },
+  });
+
+  counts = {
+    [TaskStatus.TODO]: 1,
+    [TaskStatus.IN_PROGRESS]: 1,
+    [TaskStatus.BLOCKED]: 1,
+    [TaskStatus.DONE]: 1,
+  };
+  assert.equal((await goalService.calculateProgress(GOAL_ID)).progress, 25);
+
+  counts = {
+    [TaskStatus.TODO]: 0,
+    [TaskStatus.IN_PROGRESS]: 0,
+    [TaskStatus.BLOCKED]: 0,
+    [TaskStatus.DONE]: 3,
+  };
+  assert.equal((await goalService.calculateProgress(GOAL_ID)).progress, 100);
 });
 
 test('getGoal returns the result of a team-scoped query', async () => {

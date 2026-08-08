@@ -586,6 +586,105 @@ textarea {
   font-size: 18px;
 }
 
+.goal-progress-card {
+  grid-column: 1 / -1;
+}
+
+.goal-progress-cell {
+  min-width: 320px;
+}
+
+.goal-progress {
+  display: grid;
+  gap: 10px;
+}
+
+.goal-progress-heading {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.goal-progress-heading strong {
+  color: #1f6848;
+  font-size: 24px;
+}
+
+.goal-progress-heading span {
+  color: #64736b;
+  font-size: 13px;
+}
+
+.goal-progress-track {
+  height: 10px;
+  overflow: hidden;
+  background: #e3ebe6;
+  border-radius: 999px;
+}
+
+.goal-progress-track span {
+  display: block;
+  height: 100%;
+  background: #2d7d59;
+  border-radius: inherit;
+}
+
+.goal-task-breakdown {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(70px, 1fr));
+  gap: 8px;
+  margin: 0;
+}
+
+.goal-task-breakdown div {
+  display: grid;
+  gap: 2px;
+  padding: 8px;
+  background: #f4f7f5;
+  border-radius: 7px;
+}
+
+.goal-task-breakdown dt {
+  color: #64736b;
+  font-size: 11px;
+}
+
+.goal-task-breakdown dd {
+  margin: 0;
+  font-weight: 750;
+}
+
+.goal-progress.compact .goal-progress-heading strong {
+  font-size: 18px;
+}
+
+.goal-progress.compact .goal-task-breakdown div {
+  padding: 6px;
+}
+
+.goal-progress-empty {
+  margin: 0;
+  padding: 12px;
+  color: #64736b;
+  background: #f4f7f5;
+  border-radius: 8px;
+  text-align: center;
+}
+
+.goal-deadline-text {
+  display: block;
+  margin-top: 5px;
+  color: #64736b;
+  font-size: 12px;
+  white-space: nowrap;
+}
+
+.goal-deadline-text.overdue {
+  color: #8b2020;
+  font-weight: 750;
+}
+
 .goal-tasks-shell {
   min-height: 220px;
 }
@@ -919,6 +1018,10 @@ textarea {
     grid-template-columns: repeat(2, minmax(150px, 1fr));
   }
 
+  .goal-task-breakdown {
+    grid-template-columns: repeat(3, minmax(70px, 1fr));
+  }
+
   .my-task-controls {
     grid-template-columns: 1fr;
   }
@@ -977,6 +1080,10 @@ textarea {
   .task-number-date-fields,
   .task-metadata {
     grid-template-columns: 1fr;
+  }
+
+  .goal-task-breakdown {
+    grid-template-columns: repeat(2, minmax(70px, 1fr));
   }
 
   .capacity-summary {

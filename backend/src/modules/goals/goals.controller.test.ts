@@ -31,7 +31,15 @@ function goalProjection(overrides: Partial<GoalProjection> = {}): GoalProjection
     status: GoalStatus.PLANNED,
     importance: GoalImportance.HIGH,
     createdById: 'creator-id',
-    progress: null,
+    progress: 50,
+    noTasksYet: false,
+    taskStatusBreakdown: {
+      total: 4,
+      todo: 1,
+      inProgress: 1,
+      blocked: 0,
+      done: 2,
+    },
     createdAt: new Date('2026-08-08T08:00:00.000Z'),
     updatedAt: new Date('2026-08-08T08:00:00.000Z'),
     ...overrides,
@@ -128,7 +136,8 @@ for (const role of [UserRole.SUPER_ADMIN, UserRole.TEAM_LEAD]) {
 
     assert.equal(response.status, 201);
     assert.equal(body.goal.status, GoalStatus.PLANNED);
-    assert.equal(body.goal.progress, null);
+    assert.equal(body.goal.progress, 50);
+    assert.equal(body.goal.noTasksYet, false);
   });
 }
 
@@ -207,6 +216,8 @@ for (const role of Object.values(UserRole)) {
     assert.deepEqual(receivedFilter, { status: GoalStatus.ACTIVE });
     assert.equal(body.goals[0].status, GoalStatus.ACTIVE);
     assert.equal(body.goals[0].deadline, '2026-09-10');
+    assert.equal(body.goals[0].progress, 50);
+    assert.equal(body.goals[0].taskStatusBreakdown.done, 2);
   });
 }
 
@@ -226,6 +237,14 @@ test('GET /goals/:id returns goal details', async () => {
 
   assert.equal(response.status, 200);
   assert.equal(body.goal.id, GOAL_ID);
+  assert.equal(body.goal.progress, 50);
+  assert.deepEqual(body.goal.taskStatusBreakdown, {
+    total: 4,
+    todo: 1,
+    inProgress: 1,
+    blocked: 0,
+    done: 2,
+  });
 });
 
 test('GET /goals/:id returns the service not-found error', async () => {

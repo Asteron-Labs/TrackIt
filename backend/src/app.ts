@@ -36,13 +36,13 @@ export function createApp(): Express {
   const usersService = new UsersService(new UserRepository(AppDataSource));
   const teamsService = new TeamsService(new TeamRepository(AppDataSource), usersService);
   const scopeService = new ScopeService(teamsService);
-  const goalService = new GoalService(new GoalRepository(AppDataSource), scopeService);
-  const taskService = new TaskService(
-    new TaskRepository(AppDataSource),
-    goalService,
-    teamsService,
+  const taskRepository = new TaskRepository(AppDataSource);
+  const goalService = new GoalService(
+    new GoalRepository(AppDataSource),
+    taskRepository,
     scopeService,
   );
+  const taskService = new TaskService(taskRepository, goalService, teamsService, scopeService);
   const authService = new AuthService(usersService, env.JWT_SECRET);
   const authenticationMiddleware = requireAuth(env.JWT_SECRET);
 

@@ -54,7 +54,15 @@ function goalProjection(overrides: Partial<GoalProjection> = {}): GoalProjection
     status: GoalStatus.ACTIVE,
     importance: GoalImportance.HIGH,
     createdById: 'creator-id',
-    progress: null,
+    progress: 0,
+    noTasksYet: true,
+    taskStatusBreakdown: {
+      total: 0,
+      todo: 0,
+      inProgress: 0,
+      blocked: 0,
+      done: 0,
+    },
     createdAt: CREATED_AT,
     updatedAt: CREATED_AT,
     ...overrides,
@@ -409,12 +417,7 @@ test("updateStatus rejects an Employee changing another employee's task", async 
   );
 
   await assert.rejects(
-    () =>
-      service.updateStatus(
-        TASK_ID,
-        TaskStatus.DONE,
-        caller(UserRole.EMPLOYEE, EMPLOYEE_ID),
-      ),
+    () => service.updateStatus(TASK_ID, TaskStatus.DONE, caller(UserRole.EMPLOYEE, EMPLOYEE_ID)),
     (error: unknown) => error instanceof ForbiddenError,
   );
   assert.equal(updateWasCalled, false);
@@ -522,11 +525,7 @@ test('assignTask reassigns a task to a member of the owning team', async () => {
     },
   );
 
-  const task = await service.assignTask(
-    TASK_ID,
-    OTHER_EMPLOYEE_ID,
-    caller(UserRole.TEAM_LEAD),
-  );
+  const task = await service.assignTask(TASK_ID, OTHER_EMPLOYEE_ID, caller(UserRole.TEAM_LEAD));
 
   assert.equal(checkedLeadTeamId, TEAM_ID);
   assert.deepEqual(checkedMember, { userId: OTHER_EMPLOYEE_ID, teamId: TEAM_ID });
