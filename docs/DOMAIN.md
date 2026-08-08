@@ -164,6 +164,9 @@ utilisation = estimated hours on active tasks / weekly capacity × 100
 Utilisation is driven by **estimated** hours, not recorded hours. Recorded hours are the past;
 assigned estimates are the commitment.
 
+Date ranges filter recorded hours only. Utilisation always compares active-task estimates with one
+week of capacity; a range longer than one week does not scale the capacity denominator.
+
 ### Blocked
 A task is blocked when at least one task it depends on is not `DONE`.
 
