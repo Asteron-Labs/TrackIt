@@ -42,6 +42,7 @@ export type UpdateTaskRecord = Partial<
 >;
 
 export type TaskStatusCounts = Record<TaskStatus, number>;
+export type TaskStatusCountsByGoal = Map<string, TaskStatusCounts>;
 
 export class TaskRepository extends BaseRepository<Task> {
   constructor(dataSource: DataSource) {
@@ -127,24 +128,38 @@ export class TaskRepository extends BaseRepository<Task> {
   }
 
   async countByGoalAndStatus(goalId: string): Promise<TaskStatusCounts> {
+    const countsByGoal = await this.countByGoalIdsAndStatus([goalId]);
+    return countsByGoal.get(goalId)!;
+  }
+
+  async countByGoalIdsAndStatus(goalIds: string[]): Promise<TaskStatusCountsByGoal> {
+    const countsByGoal = new Map(goalIds.map((goalId) => [goalId, this.emptyStatusCounts()]));
+    if (goalIds.length === 0) return countsByGoal;
+
     const rows = await this.repo
       .createQueryBuilder('task')
-      .select('task.status', 'status')
+      .select('task.goal_id', 'goalId')
+      .addSelect('task.status', 'status')
       .addSelect('COUNT(task.id)', 'count')
-      .where('task.goal_id = :goalId', { goalId })
-      .groupBy('task.status')
-      .getRawMany<{ status: TaskStatus; count: string }>();
+      .where('task.goal_id IN (:...goalIds)', { goalIds })
+      .groupBy('task.goal_id')
+      .addGroupBy('task.status')
+      .getRawMany<{ goalId: string; status: TaskStatus; count: string }>();
 
-    const counts: TaskStatusCounts = {
+    for (const row of rows) {
+      const counts = countsByGoal.get(row.goalId);
+      if (counts) counts[row.status] = Number(row.count);
+    }
+    return countsByGoal;
+  }
+
+  private emptyStatusCounts(): TaskStatusCounts {
+    return {
       [TaskStatus.TODO]: 0,
       [TaskStatus.IN_PROGRESS]: 0,
       [TaskStatus.BLOCKED]: 0,
       [TaskStatus.DONE]: 0,
     };
-    for (const row of rows) {
-      counts[row.status] = Number(row.count);
-    }
-    return counts;
   }
 
   private applyAccessFilter(query: SelectQueryBuilder<Task>, access: TaskAccessFilter): void {

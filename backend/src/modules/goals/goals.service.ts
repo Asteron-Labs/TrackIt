@@ -1,6 +1,8 @@
 import { ScopeService } from '../../common/authorization/scope.service';
 import { ForbiddenError, NotFoundError, ValidationError } from '../../common/errors';
 import { AuthenticatedUser } from '../../common/middleware/authenticate';
+import { TaskStatus } from '../tasks/tasks.entity';
+import { TaskRepository, TaskStatusCounts } from '../tasks/tasks.repository';
 import { UserRole } from '../users/users.entity';
 import { Goal, GoalImportance, GoalStatus } from './goals.entity';
 import { GoalFilter, GoalRepository, UpdateGoalRecord } from './goals.repository';
@@ -30,14 +32,31 @@ export interface GoalProjection {
   status: GoalStatus;
   importance: GoalImportance;
   createdById: string;
-  progress: number | null;
+  progress: number;
+  noTasksYet: boolean;
+  taskStatusBreakdown: GoalTaskStatusBreakdown;
   createdAt: Date;
   updatedAt: Date;
+}
+
+export interface GoalTaskStatusBreakdown {
+  total: number;
+  todo: number;
+  inProgress: number;
+  blocked: number;
+  done: number;
+}
+
+export interface GoalProgress {
+  progress: number;
+  noTasksYet: boolean;
+  taskStatusBreakdown: GoalTaskStatusBreakdown;
 }
 
 export class GoalService {
   constructor(
     private readonly goalRepository: GoalRepository,
+    private readonly taskRepository: TaskRepository,
     private readonly scopeService: ScopeService,
   ) {}
 
@@ -56,7 +75,7 @@ export class GoalService {
       createdById: caller.userId,
     });
 
-    return this.toProjection(goal);
+    return this.toProjection(goal, this.emptyProgress());
   }
 
   async listTeamGoals(
@@ -66,7 +85,12 @@ export class GoalService {
   ): Promise<GoalProjection[]> {
     await this.assertCanViewTeam(caller, teamId);
     const goals = await this.goalRepository.findByTeam(teamId, filter);
-    return goals.map((goal) => this.toProjection(goal));
+    const countsByGoal = await this.taskRepository.countByGoalIdsAndStatus(
+      goals.map((goal) => goal.id),
+    );
+    return goals.map((goal) =>
+      this.toProjection(goal, this.progressFromCounts(countsByGoal.get(goal.id)!)),
+    );
   }
 
   async getGoal(goalId: string, caller: AuthenticatedUser): Promise<GoalProjection> {
@@ -81,7 +105,7 @@ export class GoalService {
       throw new ForbiddenError('You do not have access to this goal');
     }
 
-    return this.toProjection(scopedGoal);
+    return this.toProjection(scopedGoal, await this.calculateProgress(goalId));
   }
 
   async updateGoal(
@@ -105,7 +129,12 @@ export class GoalService {
       dto.deadline ?? scopedGoal.deadline,
     );
     const updatedGoal = await this.goalRepository.update(goalId, dto as UpdateGoalRecord);
-    return this.toProjection(updatedGoal);
+    return this.toProjection(updatedGoal, await this.calculateProgress(goalId));
+  }
+
+  async calculateProgress(goalId: string): Promise<GoalProgress> {
+    const counts = await this.taskRepository.countByGoalAndStatus(goalId);
+    return this.progressFromCounts(counts);
   }
 
   private async assertCanManageTeam(caller: AuthenticatedUser, teamId: string): Promise<void> {
@@ -131,7 +160,36 @@ export class GoalService {
     }
   }
 
-  private toProjection(goal: Goal): GoalProjection {
+  private emptyProgress(): GoalProgress {
+    return this.progressFromCounts({
+      [TaskStatus.TODO]: 0,
+      [TaskStatus.IN_PROGRESS]: 0,
+      [TaskStatus.BLOCKED]: 0,
+      [TaskStatus.DONE]: 0,
+    });
+  }
+
+  private progressFromCounts(counts: TaskStatusCounts): GoalProgress {
+    const total =
+      counts[TaskStatus.TODO] +
+      counts[TaskStatus.IN_PROGRESS] +
+      counts[TaskStatus.BLOCKED] +
+      counts[TaskStatus.DONE];
+
+    return {
+      progress: total === 0 ? 0 : (counts[TaskStatus.DONE] / total) * 100,
+      noTasksYet: total === 0,
+      taskStatusBreakdown: {
+        total,
+        todo: counts[TaskStatus.TODO],
+        inProgress: counts[TaskStatus.IN_PROGRESS],
+        blocked: counts[TaskStatus.BLOCKED],
+        done: counts[TaskStatus.DONE],
+      },
+    };
+  }
+
+  private toProjection(goal: Goal, progress: GoalProgress): GoalProjection {
     return {
       id: goal.id,
       teamId: goal.teamId,
@@ -142,7 +200,7 @@ export class GoalService {
       status: goal.status,
       importance: goal.importance,
       createdById: goal.createdById,
-      progress: null,
+      ...progress,
       createdAt: goal.createdAt,
       updatedAt: goal.updatedAt,
     };

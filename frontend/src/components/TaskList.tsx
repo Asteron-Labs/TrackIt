@@ -13,6 +13,7 @@ interface TaskListProps {
   canAssign: boolean;
   canChangeStatus: boolean;
   onTaskChanged: (task: Task) => void;
+  onTaskStatusChanged: (task: Task) => void;
 }
 
 export function TaskList({
@@ -21,6 +22,7 @@ export function TaskList({
   canAssign,
   canChangeStatus,
   onTaskChanged,
+  onTaskStatusChanged,
 }: TaskListProps) {
   const [savingTaskId, setSavingTaskId] = useState<string | null>(null);
   const [assignmentErrors, setAssignmentErrors] = useState<
@@ -93,7 +95,7 @@ export function TaskList({
                       taskId={task.id}
                       taskTitle={task.title}
                       status={task.status}
-                      onUpdated={onTaskChanged}
+                      onUpdated={onTaskStatusChanged}
                     />
                   )}
                 </div>

@@ -2,6 +2,8 @@ import { useEffect, useState } from "react";
 import { Link, useParams } from "react-router-dom";
 import { apiRequest } from "../api/client";
 import { useAuth } from "../auth/AuthContext";
+import { getGoalDeadlineDisplay } from "../components/goal-display";
+import { GoalProgress } from "../components/GoalProgress";
 import { GoalStatusBadge } from "../components/GoalStatusBadge";
 import { Navigation } from "../components/Navigation";
 import { TaskCreationForm } from "../components/TaskCreationForm";
@@ -24,6 +26,7 @@ export function GoalDetailsPage() {
   const [teamMembers, setTeamMembers] = useState<TeamMember[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState("");
+  const [progressError, setProgressError] = useState("");
 
   useEffect(() => {
     let requestWasCancelled = false;
@@ -78,6 +81,7 @@ export function GoalDetailsPage() {
           first.title.localeCompare(second.title),
       ),
     );
+    void refreshGoalProgress();
   }
 
   function replaceTask(updatedTask: Task): void {
@@ -88,11 +92,36 @@ export function GoalDetailsPage() {
     );
   }
 
+  function replaceTaskAndRefreshProgress(updatedTask: Task): void {
+    replaceTask(updatedTask);
+    void refreshGoalProgress();
+  }
+
+  async function refreshGoalProgress(): Promise<void> {
+    if (!id) return;
+
+    setProgressError("");
+    try {
+      const response = await apiRequest<GoalResponse>(`/goals/${id}`);
+      setGoal(response.goal);
+    } catch (requestError) {
+      setProgressError(
+        requestError instanceof Error
+          ? requestError.message
+          : "Unable to refresh goal progress",
+      );
+    }
+  }
+
   const canCreateTasks =
     user?.role === "SUPER_ADMIN" || user?.role === "TEAM_LEAD";
   const canAssignTasks = user?.role === "TEAM_LEAD";
   const canChangeTaskStatus =
     user?.role === "SUPER_ADMIN" || user?.role === "TEAM_LEAD";
+  const today = new Date().toISOString().slice(0, 10);
+  const deadlineDisplay = goal
+    ? getGoalDeadlineDisplay(goal.deadline, goal.status, today)
+    : null;
 
   return (
     <div className="app-shell">
@@ -127,7 +156,7 @@ export function GoalDetailsPage() {
             </header>
 
             <section
-              className="goal-metadata"
+              className="goal-metadata goal-progress-metadata"
               aria-label="Goal schedule and importance"
             >
               <div className="panel goal-metadata-card">
@@ -137,20 +166,38 @@ export function GoalDetailsPage() {
               <div className="panel goal-metadata-card">
                 <span>Deadline</span>
                 <strong>{goal.deadline}</strong>
+                {deadlineDisplay && (
+                  <small
+                    className={
+                      deadlineDisplay.overdue
+                        ? "goal-deadline-text overdue"
+                        : "goal-deadline-text"
+                    }
+                  >
+                    {deadlineDisplay.text}
+                  </small>
+                )}
               </div>
               <div className="panel goal-metadata-card">
                 <span>Importance</span>
                 <strong>{importanceLabels[goal.importance]}</strong>
               </div>
-              <div className="panel goal-metadata-card">
+              <div className="panel goal-metadata-card goal-progress-card">
                 <span>Progress</span>
-                <strong>
-                  {goal.progress === null
-                    ? "No tasks yet"
-                    : `${Math.round(goal.progress)}%`}
-                </strong>
+                <GoalProgress
+                  progress={goal.progress}
+                  noTasksYet={goal.noTasksYet}
+                  breakdown={goal.taskStatusBreakdown}
+                />
               </div>
             </section>
+
+            {progressError && (
+              <p className="form-error" role="alert">
+                Task saved, but goal progress could not be refreshed:{" "}
+                {progressError}
+              </p>
+            )}
 
             <div
               className={
@@ -187,6 +234,7 @@ export function GoalDetailsPage() {
                   canAssign={canAssignTasks}
                   canChangeStatus={canChangeTaskStatus}
                   onTaskChanged={replaceTask}
+                  onTaskStatusChanged={replaceTaskAndRefreshProgress}
                 />
               </section>
             </div>
