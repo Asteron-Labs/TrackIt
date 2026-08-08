@@ -1,6 +1,7 @@
 import express, { Express } from 'express';
 import { healthRouter } from './health/health.controller';
 import { errorHandler, notFoundHandler } from './common/middleware/error-handler';
+import { cors } from './common/middleware/cors';
 import { requireAuth } from './common/middleware/authenticate';
 import { env } from './common/config';
 import { AppDataSource } from './data-source';
@@ -20,6 +21,7 @@ import { UsersService } from './modules/users/users.service';
 export function createApp(): Express {
   const app = express();
 
+  app.use(cors(env.CORS_ORIGIN));
   app.use(express.json());
 
   app.use(healthRouter);
