@@ -1,10 +1,15 @@
 import { ScopeService } from '../../common/authorization/scope.service';
-import { MAX_DAILY_HOURS } from '../../common/config';
+import { MAX_DAILY_HOURS, MAX_TIMESHEET_HISTORY_RANGE_DAYS } from '../../common/config';
 import { ForbiddenError, NotFoundError, ValidationError } from '../../common/errors';
 import { AuthenticatedUser } from '../../common/middleware/authenticate';
 import { TaskService } from '../tasks/tasks.service';
 import { TimesheetEntry, TimesheetSubmissionStatus } from './timesheets.entity';
-import { TimesheetRepository } from './timesheets.repository';
+import {
+  DailyHoursTotal,
+  TaskHoursTotal,
+  TimesheetHistoryEntryRecord,
+  TimesheetRepository,
+} from './timesheets.repository';
 
 export interface LogTimeDto {
   taskId: string;
@@ -16,6 +21,11 @@ export interface LogTimeDto {
 export interface UpdateTimeEntryDto {
   hoursSpent?: number;
   workNote?: string;
+}
+
+export interface TimesheetHistoryRangeInput {
+  from?: string;
+  to?: string;
 }
 
 export interface TimesheetEntryProjection {
@@ -39,6 +49,29 @@ export interface UpdateTimeEntryResult {
   timesheetEntry: TimesheetEntryProjection;
   dailyTotalHours: number;
 }
+
+export interface TimesheetHistoryEntryProjection extends TimesheetEntryProjection {
+  task: {
+    id: string;
+    title: string;
+  };
+  goal: {
+    id: string;
+    title: string;
+  };
+}
+
+export interface TimesheetHistoryResult {
+  range: {
+    from: string;
+    to: string;
+  };
+  entries: TimesheetHistoryEntryProjection[];
+  dailyTotals: DailyHoursTotal[];
+  taskTotals: TaskHoursTotal[];
+}
+
+const MILLISECONDS_PER_DAY = 24 * 60 * 60 * 1000;
 
 export class TimesheetService {
   constructor(
@@ -138,6 +171,25 @@ export class TimesheetService {
     await this.timesheetRepository.delete(entryId);
   }
 
+  async getMyHistory(
+    callerId: string,
+    requestedRange: TimesheetHistoryRangeInput = {},
+  ): Promise<TimesheetHistoryResult> {
+    const range = this.resolveHistoryRange(requestedRange);
+    const [entryRecords, dailyTotals, taskTotals] = await Promise.all([
+      this.timesheetRepository.findByEmployeeInRange(callerId, range.from, range.to),
+      this.timesheetRepository.sumHoursByEmployeeGroupedByDate(callerId, range.from, range.to),
+      this.timesheetRepository.sumHoursByEmployeeGroupedByTask(callerId, range.from, range.to),
+    ]);
+
+    return {
+      range,
+      entries: entryRecords.map((record) => this.toHistoryProjection(record)),
+      dailyTotals,
+      taskTotals,
+    };
+  }
+
   private async validateEntryHours(
     employeeId: string,
     workDate: string,
@@ -170,6 +222,47 @@ export class TimesheetService {
     return `${existingNote}\n${newNote}`;
   }
 
+  private resolveHistoryRange(requestedRange: TimesheetHistoryRangeInput): {
+    from: string;
+    to: string;
+  } {
+    if (!requestedRange.from && !requestedRange.to) {
+      return this.currentWeekRange();
+    }
+    if (!requestedRange.from || !requestedRange.to) {
+      throw new ValidationError('Both from and to dates are required');
+    }
+    if (requestedRange.from > requestedRange.to) {
+      throw new ValidationError('From date must be on or before to date');
+    }
+
+    const fromTime = Date.parse(`${requestedRange.from}T00:00:00.000Z`);
+    const toTime = Date.parse(`${requestedRange.to}T00:00:00.000Z`);
+    const inclusiveDays = (toTime - fromTime) / MILLISECONDS_PER_DAY + 1;
+    if (inclusiveDays > MAX_TIMESHEET_HISTORY_RANGE_DAYS) {
+      throw new ValidationError(
+        `Date range cannot exceed ${MAX_TIMESHEET_HISTORY_RANGE_DAYS} days`,
+      );
+    }
+
+    return { from: requestedRange.from, to: requestedRange.to };
+  }
+
+  private currentWeekRange(): { from: string; to: string } {
+    const today = new Date();
+    const daysSinceMonday = (today.getUTCDay() + 6) % 7;
+    const monday = new Date(today);
+    monday.setUTCDate(today.getUTCDate() - daysSinceMonday);
+
+    const sunday = new Date(monday);
+    sunday.setUTCDate(monday.getUTCDate() + 6);
+
+    return {
+      from: monday.toISOString().slice(0, 10),
+      to: sunday.toISOString().slice(0, 10),
+    };
+  }
+
   private toProjection(entry: TimesheetEntry): TimesheetEntryProjection {
     return {
       id: entry.id,
@@ -180,6 +273,14 @@ export class TimesheetService {
       workNote: entry.workNote,
       createdAt: entry.createdAt,
       updatedAt: entry.updatedAt,
+    };
+  }
+
+  private toHistoryProjection(record: TimesheetHistoryEntryRecord): TimesheetHistoryEntryProjection {
+    return {
+      ...this.toProjection(record.entry),
+      task: record.task,
+      goal: record.goal,
     };
   }
 }

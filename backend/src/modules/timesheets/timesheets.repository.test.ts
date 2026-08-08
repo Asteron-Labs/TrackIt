@@ -1,6 +1,9 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { DataSource } from 'typeorm';
+import { Goal } from '../goals/goals.entity';
+import { Task } from '../tasks/tasks.entity';
+import { TimesheetEntry } from './timesheets.entity';
 import { TimesheetRepository } from './timesheets.repository';
 
 interface RecordedClause {
@@ -8,15 +11,32 @@ interface RecordedClause {
   parameters?: Record<string, unknown>;
 }
 
-function createRepository(total = '0') {
+function createRepository(
+  total = '0',
+  rawRows: Record<string, string>[] = [],
+  entities: TimesheetEntry[] = [],
+) {
   const findCalls: unknown[] = [];
   const findOneCalls: unknown[] = [];
   const updateCalls: unknown[] = [];
   const findOneByOrFailCalls: unknown[] = [];
   const deleteCalls: unknown[] = [];
   const whereClauses: RecordedClause[] = [];
+  const joins: Array<[unknown, string, string]> = [];
+  const selectedColumns: Array<[string, string | undefined]> = [];
+  const orderClauses: Array<[string, string]> = [];
+  const groupClauses: string[] = [];
   const queryBuilder = {
-    select() {
+    innerJoin(table: unknown, alias: string, condition: string) {
+      joins.push([table, alias, condition]);
+      return this;
+    },
+    select(column: string, alias?: string) {
+      selectedColumns.push([column, alias]);
+      return this;
+    },
+    addSelect(column: string, alias: string) {
+      selectedColumns.push([column, alias]);
       return this;
     },
     where(clause: string, parameters?: Record<string, unknown>) {
@@ -27,8 +47,30 @@ function createRepository(total = '0') {
       whereClauses.push({ clause, parameters });
       return this;
     },
+    orderBy(column: string, direction: string) {
+      orderClauses.push([column, direction]);
+      return this;
+    },
+    addOrderBy(column: string, direction: string) {
+      orderClauses.push([column, direction]);
+      return this;
+    },
+    groupBy(column: string) {
+      groupClauses.push(column);
+      return this;
+    },
+    addGroupBy(column: string) {
+      groupClauses.push(column);
+      return this;
+    },
     async getRawOne() {
       return { total };
+    },
+    async getRawMany() {
+      return rawRows;
+    },
+    async getRawAndEntities() {
+      return { entities, raw: rawRows };
     },
   };
   const dataSource = {
@@ -65,6 +107,10 @@ function createRepository(total = '0') {
     findOneByOrFailCalls,
     deleteCalls,
     whereClauses,
+    joins,
+    selectedColumns,
+    orderClauses,
+    groupClauses,
   };
 }
 
@@ -155,4 +201,89 @@ test('sumHoursByEmployeeInRange uses inclusive date boundaries', async () => {
       parameters: { from: '2026-08-01', to: '2026-08-07' },
     },
   ]);
+});
+
+test('findByEmployeeInRange scopes in SQL, joins task and goal, and includes the to date', async () => {
+  const boundaryEntry = { id: 'entry-id', workDate: '2026-08-07' } as TimesheetEntry;
+  const setup = createRepository(
+    '0',
+    [
+      {
+        history_task_id: 'task-id',
+        history_task_title: 'Implement history',
+        history_goal_id: 'goal-id',
+        history_goal_title: 'Track effort',
+      },
+    ],
+    [boundaryEntry],
+  );
+
+  const entries = await setup.repository.findByEmployeeInRange(
+    'employee-id',
+    '2026-08-01',
+    '2026-08-07',
+  );
+
+  assert.equal(entries[0].entry.workDate, '2026-08-07');
+  assert.deepEqual(entries[0].task, { id: 'task-id', title: 'Implement history' });
+  assert.deepEqual(entries[0].goal, { id: 'goal-id', title: 'Track effort' });
+  assert.deepEqual(setup.joins, [
+    [Task, 'task', 'task.id = entry.task_id'],
+    [Goal, 'goal', 'goal.id = task.goal_id'],
+  ]);
+  assert.deepEqual(setup.whereClauses, [
+    {
+      clause: 'entry.employee_id = :employeeId',
+      parameters: { employeeId: 'employee-id' },
+    },
+    {
+      clause: 'entry.work_date BETWEEN :from AND :to',
+      parameters: { from: '2026-08-01', to: '2026-08-07' },
+    },
+  ]);
+  assert.deepEqual(setup.orderClauses, [
+    ['entry.work_date', 'DESC'],
+    ['entry.created_at', 'DESC'],
+  ]);
+});
+
+test('sumHoursByEmployeeGroupedByDate groups inclusive employee totals by work date', async () => {
+  const setup = createRepository('0', [{ workDate: '2026-08-07', totalHours: '7.50' }]);
+
+  const totals = await setup.repository.sumHoursByEmployeeGroupedByDate(
+    'employee-id',
+    '2026-08-01',
+    '2026-08-07',
+  );
+
+  assert.deepEqual(totals, [{ workDate: '2026-08-07', totalHours: 7.5 }]);
+  assert.deepEqual(setup.groupClauses, ['entry.work_date']);
+  assert.deepEqual(setup.orderClauses, [['entry.work_date', 'DESC']]);
+  assert.deepEqual(setup.whereClauses[1], {
+    clause: 'entry.work_date BETWEEN :from AND :to',
+    parameters: { from: '2026-08-01', to: '2026-08-07' },
+  });
+});
+
+test('sumHoursByEmployeeGroupedByTask joins task and groups employee totals in SQL', async () => {
+  const setup = createRepository('0', [
+    { taskId: 'task-id', taskTitle: 'Implement history', totalHours: '9.25' },
+  ]);
+
+  const totals = await setup.repository.sumHoursByEmployeeGroupedByTask(
+    'employee-id',
+    '2026-08-01',
+    '2026-08-07',
+  );
+
+  assert.deepEqual(totals, [
+    { taskId: 'task-id', taskTitle: 'Implement history', totalHours: 9.25 },
+  ]);
+  assert.deepEqual(setup.joins, [[Task, 'task', 'task.id = entry.task_id']]);
+  assert.deepEqual(setup.groupClauses, ['entry.task_id', 'task.title']);
+  assert.deepEqual(setup.orderClauses, [['task.title', 'ASC']]);
+  assert.deepEqual(setup.whereClauses[0], {
+    clause: 'entry.employee_id = :employeeId',
+    parameters: { employeeId: 'employee-id' },
+  });
 });

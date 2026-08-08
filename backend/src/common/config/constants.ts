@@ -5,6 +5,7 @@
 
 // Capacity and workload
 export const MAX_DAILY_HOURS = 12;
+export const MAX_TIMESHEET_HISTORY_RANGE_DAYS = 90;
 export const DEFAULT_WEEKLY_CAPACITY = 40;
 export const WORKLOAD_AVAILABLE_MAX = 60; // <=60% available
 export const WORKLOAD_BALANCED_MAX = 90; // <=90% balanced, above = overloaded

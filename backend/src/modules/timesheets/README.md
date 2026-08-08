@@ -15,6 +15,9 @@ task on one date.
   observe employee entries but cannot rewrite them.
 - Editing hours re-validates both the replacement value and the adjusted daily total.
 - `submissionStatus` remains `SUBMITTED`; no approval workflow exists.
+- Employee history is always bounded to an inclusive date range of at most
+  `MAX_TIMESHEET_HISTORY_RANGE_DAYS`. An omitted range means the current Monday-to-Sunday week.
+- History entries and their daily and per-task totals are scoped to the employee in SQL.
 
 ## Public service methods
 
@@ -23,6 +26,8 @@ task on one date.
 - `TimesheetService.updateEntry(entryId, dto, caller)` checks ownership, re-validates the entry,
   and updates its hours and/or work note.
 - `TimesheetService.deleteEntry(entryId, caller)` checks ownership and deletes the entry.
+- `TimesheetService.getMyHistory(callerId, range)` resolves and validates the bounded range, then
+  returns joined entries plus daily and per-task totals.
 
 ## Repository methods
 
@@ -31,3 +36,6 @@ task on one date.
 - `findByEmployeeAndDate` and `findByEmployeeAndTaskAndDate` support daily validation and upsert.
 - `findByTask`, `sumHoursByTask`, and `sumHoursByEmployeeInRange` provide the reads required by
   later effort and timesheet views.
+- `findByEmployeeInRange` returns an employee's entries with task and goal details.
+- `sumHoursByEmployeeGroupedByDate` and `sumHoursByEmployeeGroupedByTask` calculate reusable
+  server-side history rollups.

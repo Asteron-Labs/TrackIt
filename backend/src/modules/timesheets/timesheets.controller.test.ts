@@ -12,6 +12,8 @@ import { createTimesheetsRouter } from './timesheets.controller';
 import {
   LogTimeDto,
   LogTimeResult,
+  TimesheetHistoryRangeInput,
+  TimesheetHistoryResult,
   TimesheetService,
   UpdateTimeEntryDto,
   UpdateTimeEntryResult,
@@ -26,6 +28,36 @@ const ENTRY_ID = '756aefc5-fc71-4570-b730-f6677a18ac83';
 const OTHER_ENTRY_ID = '55555555-5555-4555-8555-555555555555';
 
 const timesheetService = {
+  async getMyHistory(
+    callerId: string,
+    range: TimesheetHistoryRangeInput,
+  ): Promise<TimesheetHistoryResult> {
+    const resolvedRange =
+      range.from && range.to ? { from: range.from, to: range.to } : { from: '2026-08-03', to: '2026-08-09' };
+    if (resolvedRange.from > resolvedRange.to) {
+      throw new ValidationError('From date must be on or before to date');
+    }
+
+    return {
+      range: resolvedRange,
+      entries: [
+        {
+          id: ENTRY_ID,
+          employeeId: callerId,
+          taskId: TASK_ID,
+          workDate: resolvedRange.to,
+          hoursSpent: 2,
+          workNote: 'Implemented history',
+          createdAt: new Date('2026-08-07T08:00:00.000Z'),
+          updatedAt: new Date('2026-08-07T08:00:00.000Z'),
+          task: { id: TASK_ID, title: 'Implement history' },
+          goal: { id: 'goal-id', title: 'Track effort' },
+        },
+      ],
+      dailyTotals: [{ workDate: resolvedRange.to, totalHours: 2 }],
+      taskTotals: [{ taskId: TASK_ID, taskTitle: 'Implement history', totalHours: 2 }],
+    };
+  },
   async logTime(dto: LogTimeDto): Promise<LogTimeResult> {
     if (dto.taskId === FORBIDDEN_TASK_ID) throw new ForbiddenError();
     if (dto.taskId === LIMIT_TASK_ID) {
@@ -110,6 +142,73 @@ function validBody(taskId = TASK_ID, workNote = 'Implemented time logging'): str
     workNote,
   });
 }
+
+test('GET /timesheets/mine returns an Employees bounded history and rollups', async () => {
+  const response = await fetch(
+    `${baseUrl}/timesheets/mine?from=2026-08-01&to=2026-08-07`,
+    { headers: authorizationHeader(UserRole.EMPLOYEE) },
+  );
+  const body = (await response.json()) as TimesheetHistoryResult;
+
+  assert.equal(response.status, 200);
+  assert.deepEqual(body.range, { from: '2026-08-01', to: '2026-08-07' });
+  assert.equal(body.entries[0].employeeId, EMPLOYEE_ID);
+  assert.equal(body.entries[0].workDate, '2026-08-07');
+  assert.equal(body.entries[0].task.title, 'Implement history');
+  assert.equal(body.entries[0].goal.title, 'Track effort');
+  assert.deepEqual(body.dailyTotals, [{ workDate: '2026-08-07', totalHours: 2 }]);
+  assert.deepEqual(body.taskTotals, [
+    { taskId: TASK_ID, taskTitle: 'Implement history', totalHours: 2 },
+  ]);
+});
+
+test('GET /timesheets/mine allows an omitted range for the default week', async () => {
+  const response = await fetch(`${baseUrl}/timesheets/mine`, {
+    headers: authorizationHeader(UserRole.EMPLOYEE),
+  });
+  const body = (await response.json()) as TimesheetHistoryResult;
+
+  assert.equal(response.status, 200);
+  assert.deepEqual(body.range, { from: '2026-08-03', to: '2026-08-09' });
+});
+
+test('GET /timesheets/mine requires authentication and the Employee role', async () => {
+  const unauthenticatedResponse = await fetch(`${baseUrl}/timesheets/mine`);
+  assert.equal(unauthenticatedResponse.status, 401);
+
+  for (const role of [UserRole.SUPER_ADMIN, UserRole.TEAM_LEAD]) {
+    const response = await fetch(`${baseUrl}/timesheets/mine`, {
+      headers: authorizationHeader(role),
+    });
+    assert.equal(response.status, 403);
+  }
+});
+
+test('GET /timesheets/mine validates dates and requires both range endpoints', async () => {
+  for (const query of [
+    'from=2026-08-01',
+    'to=2026-08-07',
+    'from=2026-02-30&to=2026-03-01',
+    'from=not-a-date&to=2026-08-07',
+    'from=2026-08-01&to=2026-08-07&unexpected=true',
+  ]) {
+    const response = await fetch(`${baseUrl}/timesheets/mine?${query}`, {
+      headers: authorizationHeader(UserRole.EMPLOYEE),
+    });
+    assert.equal(response.status, 400);
+  }
+});
+
+test('GET /timesheets/mine returns a clear error for a reversed range', async () => {
+  const response = await fetch(
+    `${baseUrl}/timesheets/mine?from=2026-08-08&to=2026-08-07`,
+    { headers: authorizationHeader(UserRole.EMPLOYEE) },
+  );
+  const body = (await response.json()) as { error: { message: string } };
+
+  assert.equal(response.status, 400);
+  assert.equal(body.error.message, 'From date must be on or before to date');
+});
 
 test('POST /timesheets creates time for an Employee', async () => {
   const response = await fetch(`${baseUrl}/timesheets`, {

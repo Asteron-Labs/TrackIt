@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { ScopeService } from '../../common/authorization/scope.service';
-import { MAX_DAILY_HOURS } from '../../common/config';
+import { MAX_DAILY_HOURS, MAX_TIMESHEET_HISTORY_RANGE_DAYS } from '../../common/config';
 import { ForbiddenError, NotFoundError, ValidationError } from '../../common/errors';
 import { AuthenticatedUser } from '../../common/middleware/authenticate';
 import { TaskProjection, TaskService } from '../tasks/tasks.service';
@@ -9,6 +9,9 @@ import { UserRole } from '../users/users.entity';
 import { TimesheetEntry, TimesheetSubmissionStatus } from './timesheets.entity';
 import {
   CreateTimesheetRecord,
+  DailyHoursTotal,
+  TaskHoursTotal,
+  TimesheetHistoryEntryRecord,
   TimesheetRepository,
   UpdateTimesheetRecord,
 } from './timesheets.repository';
@@ -50,6 +53,9 @@ interface ServiceSetup {
   existingEntry?: TimesheetEntry | null;
   entryById?: TimesheetEntry | null;
   taskError?: Error;
+  historyEntries?: TimesheetHistoryEntryRecord[];
+  dailyHistoryTotals?: DailyHoursTotal[];
+  taskHistoryTotals?: TaskHoursTotal[];
 }
 
 function createService(setup: ServiceSetup = {}) {
@@ -57,6 +63,12 @@ function createService(setup: ServiceSetup = {}) {
   const createdRecords: CreateTimesheetRecord[] = [];
   const updatedRecords: Array<{ id: string; changes: UpdateTimesheetRecord }> = [];
   const deletedIds: string[] = [];
+  const historyCalls: Array<{
+    method: string;
+    employeeId: string;
+    from: string;
+    to: string;
+  }> = [];
 
   const taskService = {
     async getTask(): Promise<TaskProjection> {
@@ -98,6 +110,30 @@ function createService(setup: ServiceSetup = {}) {
       calls.push('delete');
       deletedIds.push(id);
     },
+    async findByEmployeeInRange(
+      employeeId: string,
+      from: string,
+      to: string,
+    ): Promise<TimesheetHistoryEntryRecord[]> {
+      historyCalls.push({ method: 'entries', employeeId, from, to });
+      return setup.historyEntries ?? [];
+    },
+    async sumHoursByEmployeeGroupedByDate(
+      employeeId: string,
+      from: string,
+      to: string,
+    ): Promise<DailyHoursTotal[]> {
+      historyCalls.push({ method: 'daily', employeeId, from, to });
+      return setup.dailyHistoryTotals ?? [];
+    },
+    async sumHoursByEmployeeGroupedByTask(
+      employeeId: string,
+      from: string,
+      to: string,
+    ): Promise<TaskHoursTotal[]> {
+      historyCalls.push({ method: 'tasks', employeeId, from, to });
+      return setup.taskHistoryTotals ?? [];
+    },
   } as unknown as TimesheetRepository;
 
   const scopeService = {
@@ -113,6 +149,7 @@ function createService(setup: ServiceSetup = {}) {
     createdRecords,
     updatedRecords,
     deletedIds,
+    historyCalls,
   };
 }
 
@@ -312,4 +349,108 @@ test('deleteEntry returns 404 for a missing entry and 403 for another employees 
   });
   await assert.rejects(forbidden.service.deleteEntry(ENTRY_ID, caller), ForbiddenError);
   assert.deepEqual(forbidden.calls, ['find-entry', 'ownership']);
+});
+
+test('getMyHistory defaults to the current Monday-to-Sunday week', async () => {
+  const { service, historyCalls } = createService();
+
+  const result = await service.getMyHistory(EMPLOYEE_ID);
+
+  const from = new Date(`${result.range.from}T00:00:00.000Z`);
+  const to = new Date(`${result.range.to}T00:00:00.000Z`);
+  const today = new Date().toISOString().slice(0, 10);
+  assert.equal(from.getUTCDay(), 1);
+  assert.equal(to.getUTCDay(), 0);
+  assert.equal((to.getTime() - from.getTime()) / (24 * 60 * 60 * 1000), 6);
+  assert.ok(result.range.from <= today && today <= result.range.to);
+  assert.deepEqual(historyCalls, [
+    { method: 'entries', employeeId: EMPLOYEE_ID, ...result.range },
+    { method: 'daily', employeeId: EMPLOYEE_ID, ...result.range },
+    { method: 'tasks', employeeId: EMPLOYEE_ID, ...result.range },
+  ]);
+});
+
+test('getMyHistory returns joined entries and both repository rollups', async () => {
+  const entry = timesheetEntry({ workDate: '2026-08-07' });
+  const dailyTotals = [{ workDate: '2026-08-07', totalHours: 2 }];
+  const taskTotals = [{ taskId: TASK_ID, taskTitle: 'Implement history', totalHours: 2 }];
+  const setup = createService({
+    historyEntries: [
+      {
+        entry,
+        task: { id: TASK_ID, title: 'Implement history' },
+        goal: { id: 'goal-id', title: 'Track effort' },
+      },
+    ],
+    dailyHistoryTotals: dailyTotals,
+    taskHistoryTotals: taskTotals,
+  });
+
+  const result = await setup.service.getMyHistory(EMPLOYEE_ID, {
+    from: '2026-08-01',
+    to: '2026-08-07',
+  });
+
+  assert.deepEqual(result.range, { from: '2026-08-01', to: '2026-08-07' });
+  assert.deepEqual(result.entries[0].task, { id: TASK_ID, title: 'Implement history' });
+  assert.deepEqual(result.entries[0].goal, { id: 'goal-id', title: 'Track effort' });
+  assert.equal('submissionStatus' in result.entries[0], false);
+  assert.deepEqual(result.dailyTotals, dailyTotals);
+  assert.deepEqual(result.taskTotals, taskTotals);
+  assert.deepEqual(setup.historyCalls, [
+    {
+      method: 'entries',
+      employeeId: EMPLOYEE_ID,
+      from: '2026-08-01',
+      to: '2026-08-07',
+    },
+    {
+      method: 'daily',
+      employeeId: EMPLOYEE_ID,
+      from: '2026-08-01',
+      to: '2026-08-07',
+    },
+    {
+      method: 'tasks',
+      employeeId: EMPLOYEE_ID,
+      from: '2026-08-01',
+      to: '2026-08-07',
+    },
+  ]);
+});
+
+test('getMyHistory accepts an inclusive range at the configured maximum', async () => {
+  const { service, historyCalls } = createService();
+
+  await service.getMyHistory(EMPLOYEE_ID, {
+    from: '2026-01-01',
+    to: '2026-03-31',
+  });
+
+  assert.equal(MAX_TIMESHEET_HISTORY_RANGE_DAYS, 90);
+  assert.equal(historyCalls.length, 3);
+});
+
+test('getMyHistory rejects incomplete, reversed, and excessive ranges before querying', async () => {
+  const setup = createService();
+
+  await assert.rejects(
+    setup.service.getMyHistory(EMPLOYEE_ID, { from: '2026-08-01' }),
+    /Both from and to dates are required/,
+  );
+  await assert.rejects(
+    setup.service.getMyHistory(EMPLOYEE_ID, {
+      from: '2026-08-08',
+      to: '2026-08-07',
+    }),
+    /From date must be on or before to date/,
+  );
+  await assert.rejects(
+    setup.service.getMyHistory(EMPLOYEE_ID, {
+      from: '2026-01-01',
+      to: '2026-04-01',
+    }),
+    /Date range cannot exceed 90 days/,
+  );
+  assert.deepEqual(setup.historyCalls, []);
 });

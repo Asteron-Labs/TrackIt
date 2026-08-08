@@ -3,7 +3,7 @@ import { z } from 'zod';
 import { requireRole } from '../../common/middleware/authorize';
 import { validate } from '../../common/middleware/validate';
 import { UserRole } from '../users/users.entity';
-import { TimesheetService } from './timesheets.service';
+import { TimesheetHistoryRangeInput, TimesheetService } from './timesheets.service';
 
 const dateOnlySchema = z
   .string()
@@ -34,6 +34,17 @@ const entryIdSchema = z.object({
   id: z.string().uuid(),
 });
 
+const historyRangeSchema = z
+  .object({
+    from: dateOnlySchema.optional(),
+    to: dateOnlySchema.optional(),
+  })
+  .strict()
+  .refine(
+    (range) => Boolean(range.from) === Boolean(range.to),
+    'Provide both from and to, or omit both',
+  );
+
 export function createTimesheetsRouter(
   timesheetService: TimesheetService,
   requireAuth: RequestHandler,
@@ -41,6 +52,23 @@ export function createTimesheetsRouter(
   const timesheetsRouter = Router();
 
   timesheetsRouter.use(requireAuth);
+  timesheetsRouter.get(
+    '/mine',
+    requireRole(UserRole.EMPLOYEE),
+    validate({ query: historyRangeSchema }),
+    async (req, res, next) => {
+      try {
+        const result = await timesheetService.getMyHistory(
+          req.user!.userId,
+          req.query as TimesheetHistoryRangeInput,
+        );
+        res.status(200).json(result);
+      } catch (error) {
+        next(error);
+      }
+    },
+  );
+
   timesheetsRouter.post(
     '/',
     requireRole(UserRole.EMPLOYEE),
