@@ -92,6 +92,7 @@ Owns how much time was actually spent.
 - The employee is the task's assignee
 - Hours are greater than zero
 - One employee's total for one date does not exceed the daily maximum
+- Repeated logs for the same employee, task and date add to one entry and append the work note
 - The work date is not in the future
 - Only the owning employee may edit or delete an entry
 

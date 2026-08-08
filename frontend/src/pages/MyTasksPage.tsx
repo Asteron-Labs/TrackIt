@@ -1,19 +1,12 @@
-import { useEffect, useState } from "react";
+import { Fragment, useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { apiRequest } from "../api/client";
 import { Navigation } from "../components/Navigation";
-import {
-  type MyTaskSort,
-  sortMyTasks,
-} from "../components/my-task-sorting";
+import { LogTimeForm } from "../components/LogTimeForm";
+import { type MyTaskSort, sortMyTasks } from "../components/my-task-sorting";
 import { TaskStatusBadges } from "../components/TaskStatusBadges";
 import { TaskStatusSelect } from "../components/TaskStatusSelect";
-import type {
-  MyTask,
-  MyTasksResponse,
-  Task,
-  TaskStatus,
-} from "../types/task";
+import type { MyTask, MyTasksResponse, Task, TaskStatus } from "../types/task";
 
 export function MyTasksPage() {
   const [tasks, setTasks] = useState<MyTask[]>([]);
@@ -22,6 +15,7 @@ export function MyTasksPage() {
   const [sort, setSort] = useState<MyTaskSort>("DEADLINE");
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState("");
+  const [loggingTaskId, setLoggingTaskId] = useState<string | null>(null);
 
   useEffect(() => {
     let requestWasCancelled = false;
@@ -93,7 +87,10 @@ export function MyTasksPage() {
           </div>
         </header>
 
-        <section className="panel my-tasks-panel" aria-labelledby="my-tasks-title">
+        <section
+          className="panel my-tasks-panel"
+          aria-labelledby="my-tasks-title"
+        >
           <div className="my-task-controls">
             <div>
               <label htmlFor="my-task-status-filter">Status</label>
@@ -160,39 +157,70 @@ export function MyTasksPage() {
                     <th scope="col">Deadline</th>
                     <th scope="col">Status and priority</th>
                     <th scope="col">Estimate</th>
+                    <th scope="col">Actions</th>
                   </tr>
                 </thead>
                 <tbody>
                   {sortedTasks.map((task) => (
-                    <tr className={task.overdue ? "overdue-task-row" : ""} key={task.id}>
-                      <td>
-                        <Link className="task-link" to={`/tasks/${task.id}`}>
-                          {task.title}
-                        </Link>
-                      </td>
-                      <td>
-                        <Link className="goal-link" to={`/goals/${task.goal.id}`}>
-                          {task.goal.title}
-                        </Link>
-                      </td>
-                      <td>{task.dueDate}</td>
-                      <td>
-                        <div className="my-task-status-cell">
-                          <TaskStatusBadges
-                            status={task.status}
-                            priority={task.priority}
-                            overdue={task.overdue}
-                          />
-                          <TaskStatusSelect
-                            taskId={task.id}
-                            taskTitle={task.title}
-                            status={task.status}
-                            onUpdated={applyStatusUpdate}
-                          />
-                        </div>
-                      </td>
-                      <td>{task.estimatedHours}h</td>
-                    </tr>
+                    <Fragment key={task.id}>
+                      <tr className={task.overdue ? "overdue-task-row" : ""}>
+                        <td>
+                          <Link className="task-link" to={`/tasks/${task.id}`}>
+                            {task.title}
+                          </Link>
+                        </td>
+                        <td>
+                          <Link
+                            className="goal-link"
+                            to={`/goals/${task.goal.id}`}
+                          >
+                            {task.goal.title}
+                          </Link>
+                        </td>
+                        <td>{task.dueDate}</td>
+                        <td>
+                          <div className="my-task-status-cell">
+                            <TaskStatusBadges
+                              status={task.status}
+                              priority={task.priority}
+                              overdue={task.overdue}
+                            />
+                            <TaskStatusSelect
+                              taskId={task.id}
+                              taskTitle={task.title}
+                              status={task.status}
+                              onUpdated={applyStatusUpdate}
+                            />
+                          </div>
+                        </td>
+                        <td>{task.estimatedHours}h</td>
+                        <td>
+                          <button
+                            className="secondary-button log-time-action"
+                            type="button"
+                            aria-expanded={loggingTaskId === task.id}
+                            onClick={() =>
+                              setLoggingTaskId((currentTaskId) =>
+                                currentTaskId === task.id ? null : task.id,
+                              )
+                            }
+                          >
+                            Log Time
+                          </button>
+                        </td>
+                      </tr>
+                      {loggingTaskId === task.id && (
+                        <tr className="log-time-row">
+                          <td colSpan={6}>
+                            <LogTimeForm
+                              taskId={task.id}
+                              taskTitle={task.title}
+                              onClose={() => setLoggingTaskId(null)}
+                            />
+                          </td>
+                        </tr>
+                      )}
+                    </Fragment>
                   ))}
                 </tbody>
               </table>

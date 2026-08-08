@@ -750,6 +750,62 @@ textarea {
   gap: 8px;
 }
 
+.log-time-action {
+  white-space: nowrap;
+}
+
+.log-time-row > td {
+  padding: 0 12px 18px;
+  background: #f4f8f5;
+}
+
+.log-time-panel {
+  padding: 20px;
+  background: #ffffff;
+  border: 1px solid #d7e4dc;
+  border-radius: 10px;
+}
+
+.log-time-heading {
+  display: flex;
+  align-items: start;
+  justify-content: space-between;
+  gap: 20px;
+  margin-bottom: 16px;
+}
+
+.log-time-heading h3 {
+  margin: 0;
+  font-size: 18px;
+}
+
+.log-time-form {
+  grid-template-columns: minmax(160px, 0.7fr) minmax(140px, 0.5fr) minmax(
+      240px,
+      1fr
+    );
+  align-items: start;
+  gap: 12px;
+}
+
+.log-time-form label {
+  display: block;
+  margin: 0 0 7px;
+}
+
+.log-time-form .field-error {
+  margin: 6px 0 0;
+}
+
+.log-time-message {
+  grid-column: 1 / -1;
+}
+
+.log-time-form .submit-button {
+  grid-column: 1 / -1;
+  justify-self: start;
+}
+
 .task-status-select {
   min-width: 145px;
   padding: 8px 10px;
@@ -1025,6 +1081,14 @@ textarea {
   .my-task-controls {
     grid-template-columns: 1fr;
   }
+
+  .log-time-form {
+    grid-template-columns: 1fr 1fr;
+  }
+
+  .log-time-note-field {
+    grid-column: 1 / -1;
+  }
 }
 
 @media (max-width: 720px) {
@@ -1101,5 +1165,18 @@ textarea {
 
   .panel {
     padding: 22px 18px;
+  }
+
+  .log-time-heading {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .log-time-form {
+    grid-template-columns: 1fr;
+  }
+
+  .log-time-note-field {
+    grid-column: auto;
   }
 }
