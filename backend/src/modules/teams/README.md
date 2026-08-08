@@ -27,3 +27,10 @@ Teams are created before leads or members are assigned.
 - `TeamsService.removeMember(teamId, userId)` removes a member unless they are the current lead.
 - `TeamsService.isLedBy(userId, teamId)` reports whether the user leads the requested team.
 - `TeamsService.isMember(userId, teamId)` reports whether the user belongs to the requested team.
+
+## Demo seed
+
+The company-structure seed creates the Platform Team and Frontend Team through `TeamsService`.
+It adds every team lead as an employee member before assigning the lead, preserving the same
+membership and role invariants as the API. Stable team names, membership checks, and current lead
+checks make repeated runs idempotent.

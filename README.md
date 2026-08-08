@@ -9,26 +9,26 @@ for the engineering rules.
 
 ## Stack
 
-| Layer      | Technology                          |
-| ---------- | ----------------------------------- |
-| Backend    | Node.js + Express + TypeScript      |
-| Frontend   | React + TypeScript + Vite           |
-| Database   | PostgreSQL + TypeORM                |
-| Validation | Zod (at the controller boundary)    |
-| Auth       | JWT                                 |
-| Dev        | Docker Compose                      |
+| Layer      | Technology                       |
+| ---------- | -------------------------------- |
+| Backend    | Node.js + Express + TypeScript   |
+| Frontend   | React + TypeScript + Vite        |
+| Database   | PostgreSQL + TypeORM             |
+| Validation | Zod (at the controller boundary) |
+| Auth       | JWT                              |
+| Dev        | Docker Compose                   |
 
 ## Architecture — the four-layer convention
 
 The backend is a modular monolith. Every domain module lives under `backend/src/modules/<module>/`
 and has exactly four layers, each in its own file:
 
-| File | Layer | Responsibility |
-| --- | --- | --- |
+| File                     | Layer      | Responsibility                                                      |
+| ------------------------ | ---------- | ------------------------------------------------------------------- |
 | `<module>.controller.ts` | Controller | HTTP: routing, request/response, **Zod validation** at the boundary |
-| `<module>.service.ts` | Service | Business logic, **authorisation**, orchestration |
-| `<module>.repository.ts` | Repository | Data access — the only layer that touches TypeORM |
-| `<module>.entity.ts` | Entity | TypeORM entity definition (no logic) |
+| `<module>.service.ts`    | Service    | Business logic, **authorisation**, orchestration                    |
+| `<module>.repository.ts` | Repository | Data access — the only layer that touches TypeORM                   |
+| `<module>.entity.ts`     | Entity     | TypeORM entity definition (no logic)                                |
 
 Rules that keep the layers honest (see `AGENTS.md` for the full set):
 
@@ -65,9 +65,9 @@ docker compose up
 
 The API and frontend containers run with hot reload.
 
-### Seeded login users
+### Seeded company structure
 
-After applying migrations, seed the three simulation roles:
+After applying migrations, seed the demo users, teams, memberships, and team leads:
 
 ```bash
 cd backend
@@ -77,13 +77,22 @@ npm run seed
 
 All seeded users use the password `TrackIt123!`:
 
-| Role | Email |
-| --- | --- |
-| Super Admin | `admin@trackit.local` |
-| Team Lead | `lead@trackit.local` |
-| Employee | `employee@trackit.local` |
+| Name          | Role        | Team          | Email                  |
+| ------------- | ----------- | ------------- | ---------------------- |
+| TrackIt Admin | Super Admin | —             | `admin@trackit.local`  |
+| Priya         | Team Lead   | Platform Team | `priya@trackit.local`  |
+| Alex          | Employee    | Platform Team | `alex@trackit.local`   |
+| Maya          | Employee    | Platform Team | `maya@trackit.local`   |
+| Jordan        | Employee    | Platform Team | `jordan@trackit.local` |
+| Diego         | Employee    | Platform Team | `diego@trackit.local`  |
+| Sam           | Team Lead   | Frontend Team | `sam@trackit.local`    |
+| Elena         | Employee    | Frontend Team | `elena@trackit.local`  |
+| Noah          | Employee    | Frontend Team | `noah@trackit.local`   |
 
-The seed command is idempotent. Passwords are stored only as bcrypt hashes.
+The Platform Team has five members and the Frontend Team has three. The seed command is
+idempotent: records are identified by stable email addresses and team names, and a second run
+does not recreate them or reassign existing relationships. Passwords are stored only as bcrypt
+hashes.
 
 ### Authentication API
 
@@ -137,7 +146,7 @@ npm start                   # run the compiled build
 npm run lint                # ESLint
 npm run format              # Prettier
 npm test                    # authentication unit tests
-npm run seed                # create simulation login users
+npm run seed                # create the demo company structure
 ```
 
 ## Running the frontend on the host

@@ -20,3 +20,9 @@ auth and teams modules.
 - `UsersService.createUser(dto)` rejects duplicate emails, hashes the supplied password, and
   returns the created user without the password hash.
 - `UsersService.listUsers(filter)` lists users, optionally filtered by role or unassigned status.
+
+## Demo seed
+
+The company-structure seed creates demo identities through `UsersService`, using stable email
+addresses to skip users that already exist. This keeps password hashing and duplicate-email rules
+the same for seeded users and users created through the API.

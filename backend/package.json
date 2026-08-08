@@ -10,7 +10,7 @@
     "dev": "ts-node-dev --respawn --transpile-only src/index.ts",
     "build": "tsc",
     "test": "node --test -r ts-node/register/files src/**/*.test.ts",
-    "seed": "ts-node src/scripts/seed-users.ts",
+    "seed": "ts-node src/scripts/seed.ts",
     "start": "node dist/index.js",
     "lint": "eslint .",
     "format": "prettier --write .",
