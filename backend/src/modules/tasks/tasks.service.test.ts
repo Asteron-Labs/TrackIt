@@ -6,6 +6,7 @@ import { AuthenticatedUser } from '../../common/middleware/authenticate';
 import { GoalProjection, GoalService } from '../goals/goals.service';
 import { GoalImportance, GoalStatus } from '../goals/goals.entity';
 import { TeamsService } from '../teams/teams.service';
+import { TaskEffortEntryProjection, TaskEffortSource } from '../timesheets/timesheets.service';
 import { UserRole } from '../users/users.entity';
 import { Task, TaskPriority, TaskStatus } from './tasks.entity';
 import {
@@ -16,7 +17,12 @@ import {
   TaskWithGoalRecord,
   UpdateTaskRecord,
 } from './tasks.repository';
-import { isTaskOverdue, TaskService } from './tasks.service';
+import {
+  classifyEffortVariance,
+  isTaskOverdue,
+  LoadTaskEffort,
+  TaskService,
+} from './tasks.service';
 
 const TASK_ID = 'ce379e12-9464-4f42-9f04-19e04be1b4d1';
 const GOAL_ID = '756aefc5-fc71-4570-b730-f6677a18ac83';
@@ -78,12 +84,14 @@ function createService(
   goalService: Partial<GoalService> = { getGoal: async () => goalProjection() },
   teamsService: Partial<TeamsService> = {},
   scopeService: Partial<ScopeService> = {},
+  loadTaskEffort: LoadTaskEffort = async () => ({ actualHours: 0, entries: [] }),
 ): TaskService {
   return new TaskService(
     taskRepository as TaskRepository,
     goalService as GoalService,
     teamsService as TeamsService,
     scopeService as ScopeService,
+    loadTaskEffort,
   );
 }
 
@@ -334,6 +342,96 @@ test('getTask returns 403 when the scoped task query excludes the caller', async
     () => service.getTask(TASK_ID, caller(UserRole.EMPLOYEE, EMPLOYEE_ID)),
     (error: unknown) => error instanceof ForbiddenError,
   );
+});
+
+test('classifyEffortVariance covers estimate, display, and overrun boundaries', () => {
+  assert.equal(classifyEffortVariance(10, 8), 'UNDER_ESTIMATE');
+  assert.equal(classifyEffortVariance(10, 10), 'ON_ESTIMATE');
+  assert.equal(classifyEffortVariance(10, 10.1), 'OVER_ESTIMATE');
+  assert.equal(classifyEffortVariance(10, 12), 'OVER_ESTIMATE');
+  assert.equal(classifyEffortVariance(10, 12.1), 'OVERRUN');
+  assert.equal(classifyEffortVariance(0, 0), 'ON_ESTIMATE');
+  assert.equal(classifyEffortVariance(0, 1), 'OVERRUN');
+});
+
+test('getTaskEffort returns variance and traceable contributing entries', async () => {
+  const effortEntry = {
+    id: 'effort-entry-id',
+    employeeId: EMPLOYEE_ID,
+    taskId: TASK_ID,
+    workDate: '2026-08-08',
+    hoursSpent: 10,
+    workNote: 'Implemented effort totals',
+    createdAt: CREATED_AT,
+    updatedAt: CREATED_AT,
+    employee: { id: EMPLOYEE_ID, name: 'Alex Employee' },
+  } as TaskEffortEntryProjection;
+  let loadedTaskId = '';
+  const loadTaskEffort = async (taskId: string): Promise<TaskEffortSource> => {
+    loadedTaskId = taskId;
+    return { actualHours: 10, entries: [effortEntry] };
+  };
+  const service = createService(
+    { findById: async () => storedTask({ estimatedHours: 8 }) },
+    undefined,
+    undefined,
+    undefined,
+    loadTaskEffort,
+  );
+
+  const result = await service.getTaskEffort(TASK_ID, caller(UserRole.TEAM_LEAD));
+
+  assert.equal(loadedTaskId, TASK_ID);
+  assert.equal(result.estimatedHours, 8);
+  assert.equal(result.actualHours, 10);
+  assert.equal(result.variance, 2);
+  assert.equal(result.variancePercent, 25);
+  assert.equal(result.varianceStatus, 'OVERRUN');
+  assert.deepEqual(result.entries, [effortEntry]);
+});
+
+test('getTaskEffort returns zero actual hours and guards a zero estimate', async () => {
+  const service = createService(
+    { findById: async () => storedTask({ estimatedHours: 0 }) },
+    undefined,
+    undefined,
+    undefined,
+    async () => ({ actualHours: 0, entries: [] }),
+  );
+
+  const result = await service.getTaskEffort(TASK_ID, caller(UserRole.TEAM_LEAD));
+
+  assert.equal(result.actualHours, 0);
+  assert.equal(result.variance, 0);
+  assert.equal(result.variancePercent, null);
+  assert.equal(result.varianceStatus, 'ON_ESTIMATE');
+  assert.deepEqual(result.entries, []);
+});
+
+test('getTaskEffort does not load timesheets when task scope rejects the caller', async () => {
+  let findCalls = 0;
+  let effortWasLoaded = false;
+  const service = createService(
+    {
+      findById: async () => {
+        findCalls += 1;
+        return findCalls === 1 ? storedTask() : null;
+      },
+    },
+    undefined,
+    undefined,
+    undefined,
+    async () => {
+      effortWasLoaded = true;
+      return { actualHours: 0, entries: [] };
+    },
+  );
+
+  await assert.rejects(
+    () => service.getTaskEffort(TASK_ID, caller(UserRole.TEAM_LEAD)),
+    (error: unknown) => error instanceof ForbiddenError,
+  );
+  assert.equal(effortWasLoaded, false);
 });
 
 test('updateTask persists only editable fields for an authorized Team Lead', async () => {

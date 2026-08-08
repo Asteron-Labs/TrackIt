@@ -1,8 +1,10 @@
 import { ScopeService } from '../../common/authorization/scope.service';
+import { EFFORT_OVERRUN_THRESHOLD } from '../../common/config';
 import { ForbiddenError, NotFoundError, ValidationError } from '../../common/errors';
 import { AuthenticatedUser } from '../../common/middleware/authenticate';
 import { GoalProjection, GoalService } from '../goals/goals.service';
 import { TeamMemberProjection, TeamsService } from '../teams/teams.service';
+import type { TaskEffortEntryProjection, TaskEffortSource } from '../timesheets/timesheets.service';
 import { UserRole } from '../users/users.entity';
 import { BusinessImpact, Task, TaskPriority, TaskStatus } from './tasks.entity';
 import {
@@ -64,8 +66,38 @@ export interface MyTaskProjection {
   };
 }
 
+export type EffortVarianceStatus =
+  | 'UNDER_ESTIMATE'
+  | 'ON_ESTIMATE'
+  | 'OVER_ESTIMATE'
+  | 'OVERRUN';
+
+export interface TaskEffortResult {
+  estimatedHours: number;
+  actualHours: number;
+  variance: number;
+  variancePercent: number | null;
+  varianceStatus: EffortVarianceStatus;
+  entries: TaskEffortEntryProjection[];
+}
+
+export type LoadTaskEffort = (taskId: string) => Promise<TaskEffortSource>;
+
 export function isTaskOverdue(dueDate: string, status: TaskStatus, today: string): boolean {
   return dueDate < today && status !== TaskStatus.DONE;
+}
+
+export function classifyEffortVariance(
+  estimatedHours: number,
+  actualHours: number,
+): EffortVarianceStatus {
+  if (actualHours < estimatedHours) return 'UNDER_ESTIMATE';
+  if (actualHours === estimatedHours) return 'ON_ESTIMATE';
+  if (estimatedHours === 0) return 'OVERRUN';
+
+  const consumedPercent = (actualHours / estimatedHours) * 100;
+  if (consumedPercent > EFFORT_OVERRUN_THRESHOLD) return 'OVERRUN';
+  return 'OVER_ESTIMATE';
 }
 
 export class TaskService {
@@ -74,6 +106,7 @@ export class TaskService {
     private readonly goalService: GoalService,
     private readonly teamsService: TeamsService,
     private readonly scopeService: ScopeService,
+    private readonly loadTaskEffort: LoadTaskEffort,
   ) {}
 
   async createTask(
@@ -134,6 +167,23 @@ export class TaskService {
 
     const assignees = await this.loadAssignees(goal, [task], caller);
     return this.toProjection(task, goal.deadline, assignees);
+  }
+
+  async getTaskEffort(taskId: string, caller: AuthenticatedUser): Promise<TaskEffortResult> {
+    const task = await this.getTask(taskId, caller);
+    const effort = await this.loadTaskEffort(taskId);
+    const variance = effort.actualHours - task.estimatedHours;
+    const variancePercent =
+      task.estimatedHours === 0 ? null : (variance / task.estimatedHours) * 100;
+
+    return {
+      estimatedHours: task.estimatedHours,
+      actualHours: effort.actualHours,
+      variance,
+      variancePercent,
+      varianceStatus: classifyEffortVariance(task.estimatedHours, effort.actualHours),
+      entries: effort.entries,
+    };
   }
 
   async updateTask(

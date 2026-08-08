@@ -34,6 +34,10 @@ const entryIdSchema = z.object({
   id: z.string().uuid(),
 });
 
+const teamIdSchema = z.object({
+  teamId: z.string().uuid(),
+});
+
 const historyRangeSchema = z
   .object({
     from: dateOnlySchema.optional(),
@@ -115,4 +119,32 @@ export function createTimesheetsRouter(
   );
 
   return timesheetsRouter;
+}
+
+export function createTeamTimesheetsRouter(
+  timesheetService: TimesheetService,
+  requireAuth: RequestHandler,
+): Router {
+  const teamTimesheetsRouter = Router();
+
+  teamTimesheetsRouter.use(requireAuth);
+  teamTimesheetsRouter.get(
+    '/:teamId/timesheets',
+    requireRole(UserRole.TEAM_LEAD),
+    validate({ params: teamIdSchema, query: historyRangeSchema }),
+    async (req, res, next) => {
+      try {
+        const result = await timesheetService.getTeamTimesheets(
+          req.params.teamId,
+          req.query as TimesheetHistoryRangeInput,
+          req.user!,
+        );
+        res.status(200).json(result);
+      } catch (error) {
+        next(error);
+      }
+    },
+  );
+
+  return teamTimesheetsRouter;
 }

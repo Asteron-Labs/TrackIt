@@ -4,15 +4,18 @@ import { apiRequest } from "../api/client";
 import { useAuth } from "../auth/AuthContext";
 import { AssigneeSelect } from "../components/AssigneeSelect";
 import { Navigation } from "../components/Navigation";
+import { TaskEffortPanel } from "../components/TaskEffortPanel";
 import { TaskStatusBadges } from "../components/TaskStatusBadges";
 import type { GoalResponse } from "../types/goal";
 import type { Task, TaskResponse } from "../types/task";
 import type { TeamDetailsResponse, TeamMember } from "../types/team";
+import type { TaskEffort, TaskEffortResponse } from "../types/timesheet";
 
 export function TaskDetailsPage() {
   const { id } = useParams();
   const { user } = useAuth();
   const [task, setTask] = useState<Task | null>(null);
+  const [taskEffort, setTaskEffort] = useState<TaskEffort | null>(null);
   const [teamMembers, setTeamMembers] = useState<TeamMember[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [isSavingAssignee, setIsSavingAssignee] = useState(false);
@@ -27,7 +30,14 @@ export function TaskDetailsPage() {
       setError("");
 
       try {
-        const taskResponse = await apiRequest<TaskResponse>(`/tasks/${id}`);
+        const canViewEffort =
+          user?.role === "TEAM_LEAD" || user?.role === "SUPER_ADMIN";
+        const [taskResponse, effortResponse] = await Promise.all([
+          apiRequest<TaskResponse>(`/tasks/${id}`),
+          canViewEffort
+            ? apiRequest<TaskEffortResponse>(`/tasks/${id}/effort`)
+            : Promise.resolve(null),
+        ]);
         let members: TeamMember[] = [];
         if (user?.role === "TEAM_LEAD") {
           const goalResponse = await apiRequest<GoalResponse>(
@@ -41,6 +51,7 @@ export function TaskDetailsPage() {
 
         if (!requestWasCancelled) {
           setTask(taskResponse.task);
+          setTaskEffort(effortResponse?.effort ?? null);
           setTeamMembers(members);
         }
       } catch (requestError) {
@@ -180,6 +191,8 @@ export function TaskDetailsPage() {
                 <strong>{task.estimatedHours} hours</strong>
               </div>
             </section>
+
+            {taskEffort && <TaskEffortPanel effort={taskEffort} />}
           </>
         )}
       </main>

@@ -16,8 +16,11 @@ import { GoalRepository } from './modules/goals/goals.repository';
 import { GoalService } from './modules/goals/goals.service';
 import { createTasksRouter } from './modules/tasks/tasks.controller';
 import { TaskRepository } from './modules/tasks/tasks.repository';
-import { TaskService } from './modules/tasks/tasks.service';
-import { createTimesheetsRouter } from './modules/timesheets/timesheets.controller';
+import { LoadTaskEffort, TaskService } from './modules/tasks/tasks.service';
+import {
+  createTeamTimesheetsRouter,
+  createTimesheetsRouter,
+} from './modules/timesheets/timesheets.controller';
 import { TimesheetRepository } from './modules/timesheets/timesheets.repository';
 import { TimesheetService } from './modules/timesheets/timesheets.service';
 import { createUsersRouter } from './modules/users/users.controller';
@@ -45,9 +48,18 @@ export function createApp(): Express {
     taskRepository,
     scopeService,
   );
-  const taskService = new TaskService(taskRepository, goalService, teamsService, scopeService);
-  const timesheetService = new TimesheetService(
-    new TimesheetRepository(AppDataSource),
+  const timesheetRepository = new TimesheetRepository(AppDataSource);
+  const loadTaskEffort: LoadTaskEffort = (taskId) =>
+    timesheetService.getTaskEffortSource(taskId);
+  const taskService: TaskService = new TaskService(
+    taskRepository,
+    goalService,
+    teamsService,
+    scopeService,
+    loadTaskEffort,
+  );
+  const timesheetService: TimesheetService = new TimesheetService(
+    timesheetRepository,
     taskService,
     scopeService,
   );
@@ -59,6 +71,10 @@ export function createApp(): Express {
   app.use('/teams', createTeamsRouter(teamsService, authenticationMiddleware));
   app.use(createGoalsRouter(goalService, authenticationMiddleware));
   app.use(createTasksRouter(taskService, authenticationMiddleware));
+  app.use(
+    '/teams',
+    createTeamTimesheetsRouter(timesheetService, authenticationMiddleware),
+  );
   app.use('/timesheets', createTimesheetsRouter(timesheetService, authenticationMiddleware));
 
   app.use(notFoundHandler);

@@ -8,13 +8,14 @@ import { ForbiddenError, ValidationError } from '../../common/errors';
 import { requireAuth } from '../../common/middleware/authenticate';
 import { errorHandler } from '../../common/middleware/error-handler';
 import { UserRole } from '../users/users.entity';
-import { createTimesheetsRouter } from './timesheets.controller';
+import { createTeamTimesheetsRouter, createTimesheetsRouter } from './timesheets.controller';
 import {
   LogTimeDto,
   LogTimeResult,
   TimesheetHistoryRangeInput,
   TimesheetHistoryResult,
   TimesheetService,
+  TeamTimesheetResult,
   UpdateTimeEntryDto,
   UpdateTimeEntryResult,
 } from './timesheets.service';
@@ -22,12 +23,42 @@ import {
 const JWT_SECRET = 'test-secret-that-is-at-least-32-characters';
 const EMPLOYEE_ID = '2894b41a-d903-421b-8cbb-4dbd48c836ab';
 const TASK_ID = 'ce379e12-9464-4f42-9f04-19e04be1b4d1';
+const TEAM_ID = '6bf8cd4f-02af-4211-8e0e-619f888f7381';
+const OTHER_TEAM_ID = '11111111-1111-4111-8111-111111111111';
 const FORBIDDEN_TASK_ID = '33333333-3333-4333-8333-333333333333';
 const LIMIT_TASK_ID = '44444444-4444-4444-8444-444444444444';
 const ENTRY_ID = '756aefc5-fc71-4570-b730-f6677a18ac83';
 const OTHER_ENTRY_ID = '55555555-5555-4555-8555-555555555555';
 
 const timesheetService = {
+  async getTeamTimesheets(
+    teamId: string,
+    range: TimesheetHistoryRangeInput,
+  ): Promise<TeamTimesheetResult> {
+    if (teamId === OTHER_TEAM_ID) throw new ForbiddenError();
+    const resolvedRange =
+      range.from && range.to
+        ? { from: range.from, to: range.to }
+        : { from: '2026-08-03', to: '2026-08-09' };
+    return {
+      range: resolvedRange,
+      entries: [
+        {
+          id: ENTRY_ID,
+          employeeId: EMPLOYEE_ID,
+          taskId: TASK_ID,
+          workDate: resolvedRange.to,
+          hoursSpent: 2,
+          workNote: 'Implemented team view',
+          createdAt: new Date('2026-08-07T08:00:00.000Z'),
+          updatedAt: new Date('2026-08-07T08:00:00.000Z'),
+          employee: { id: EMPLOYEE_ID, name: 'Alex Employee' },
+          task: { id: TASK_ID, title: 'Implement team view' },
+          goal: { id: 'goal-id', title: 'Track effort' },
+        },
+      ],
+    };
+  },
   async getMyHistory(
     callerId: string,
     range: TimesheetHistoryRangeInput,
@@ -104,6 +135,7 @@ const timesheetService = {
 
 const app = express();
 app.use(express.json());
+app.use('/teams', createTeamTimesheetsRouter(timesheetService, requireAuth(JWT_SECRET)));
 app.use('/timesheets', createTimesheetsRouter(timesheetService, requireAuth(JWT_SECRET)));
 app.use(errorHandler);
 
@@ -142,6 +174,54 @@ function validBody(taskId = TASK_ID, workNote = 'Implemented time logging'): str
     workNote,
   });
 }
+
+test('GET /teams/:teamId/timesheets returns the Team Leads filtered entries', async () => {
+  const response = await fetch(
+    `${baseUrl}/teams/${TEAM_ID}/timesheets?from=2026-08-01&to=2026-08-07`,
+    { headers: authorizationHeader(UserRole.TEAM_LEAD) },
+  );
+  const body = (await response.json()) as TeamTimesheetResult;
+
+  assert.equal(response.status, 200);
+  assert.deepEqual(body.range, { from: '2026-08-01', to: '2026-08-07' });
+  assert.equal(body.entries[0].employee.name, 'Alex Employee');
+  assert.equal(body.entries[0].task.title, 'Implement team view');
+  assert.equal(body.entries[0].goal.title, 'Track effort');
+});
+
+test('GET /teams/:teamId/timesheets returns 403 for another team', async () => {
+  const response = await fetch(`${baseUrl}/teams/${OTHER_TEAM_ID}/timesheets`, {
+    headers: authorizationHeader(UserRole.TEAM_LEAD),
+  });
+
+  assert.equal(response.status, 403);
+});
+
+test('GET /teams/:teamId/timesheets requires the Team Lead role and authentication', async () => {
+  for (const role of [UserRole.SUPER_ADMIN, UserRole.EMPLOYEE]) {
+    const response = await fetch(`${baseUrl}/teams/${TEAM_ID}/timesheets`, {
+      headers: authorizationHeader(role),
+    });
+    assert.equal(response.status, 403);
+  }
+
+  const unauthenticatedResponse = await fetch(`${baseUrl}/teams/${TEAM_ID}/timesheets`);
+  assert.equal(unauthenticatedResponse.status, 401);
+});
+
+test('GET /teams/:teamId/timesheets validates identifiers and paired date filters', async () => {
+  for (const path of [
+    '/teams/not-a-uuid/timesheets',
+    `/teams/${TEAM_ID}/timesheets?from=2026-08-01`,
+    `/teams/${TEAM_ID}/timesheets?from=2026-02-30&to=2026-03-01`,
+    `/teams/${TEAM_ID}/timesheets?from=2026-08-01&to=2026-08-07&unexpected=true`,
+  ]) {
+    const response = await fetch(`${baseUrl}${path}`, {
+      headers: authorizationHeader(UserRole.TEAM_LEAD),
+    });
+    assert.equal(response.status, 400);
+  }
+});
 
 test('GET /timesheets/mine returns an Employees bounded history and rollups', async () => {
   const response = await fetch(

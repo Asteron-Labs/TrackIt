@@ -6,7 +6,9 @@ import { TaskService } from '../tasks/tasks.service';
 import { TimesheetEntry, TimesheetSubmissionStatus } from './timesheets.entity';
 import {
   DailyHoursTotal,
+  TaskTimesheetEntryRecord,
   TaskHoursTotal,
+  TeamTimesheetEntryRecord,
   TimesheetHistoryEntryRecord,
   TimesheetRepository,
 } from './timesheets.repository';
@@ -69,6 +71,33 @@ export interface TimesheetHistoryResult {
   entries: TimesheetHistoryEntryProjection[];
   dailyTotals: DailyHoursTotal[];
   taskTotals: TaskHoursTotal[];
+}
+
+export interface TaskEffortEntryProjection extends TimesheetEntryProjection {
+  employee: {
+    id: string;
+    name: string;
+  };
+}
+
+export interface TaskEffortSource {
+  actualHours: number;
+  entries: TaskEffortEntryProjection[];
+}
+
+export interface TeamTimesheetEntryProjection extends TimesheetHistoryEntryProjection {
+  employee: {
+    id: string;
+    name: string;
+  };
+}
+
+export interface TeamTimesheetResult {
+  range: {
+    from: string;
+    to: string;
+  };
+  entries: TeamTimesheetEntryProjection[];
 }
 
 const MILLISECONDS_PER_DAY = 24 * 60 * 60 * 1000;
@@ -190,6 +219,37 @@ export class TimesheetService {
     };
   }
 
+  async getTaskEffortSource(taskId: string): Promise<TaskEffortSource> {
+    const [totalsByTaskId, entryRecords] = await Promise.all([
+      this.timesheetRepository.sumHoursByTaskIds([taskId]),
+      this.timesheetRepository.findByTask(taskId),
+    ]);
+
+    return {
+      actualHours: totalsByTaskId.get(taskId) ?? 0,
+      entries: entryRecords.map((record) => this.toTaskEffortProjection(record)),
+    };
+  }
+
+  async getTeamTimesheets(
+    teamId: string,
+    requestedRange: TimesheetHistoryRangeInput,
+    caller: AuthenticatedUser,
+  ): Promise<TeamTimesheetResult> {
+    await this.scopeService.assertTeamLeadOf(caller.userId, teamId);
+    const range = this.resolveHistoryRange(requestedRange);
+    const entryRecords = await this.timesheetRepository.findByTeamInRange(
+      teamId,
+      range.from,
+      range.to,
+    );
+
+    return {
+      range,
+      entries: entryRecords.map((record) => this.toTeamTimesheetProjection(record)),
+    };
+  }
+
   private async validateEntryHours(
     employeeId: string,
     workDate: string,
@@ -281,6 +341,22 @@ export class TimesheetService {
       ...this.toProjection(record.entry),
       task: record.task,
       goal: record.goal,
+    };
+  }
+
+  private toTaskEffortProjection(record: TaskTimesheetEntryRecord): TaskEffortEntryProjection {
+    return {
+      ...this.toProjection(record.entry),
+      employee: record.employee,
+    };
+  }
+
+  private toTeamTimesheetProjection(
+    record: TeamTimesheetEntryRecord,
+  ): TeamTimesheetEntryProjection {
+    return {
+      ...this.toHistoryProjection(record),
+      employee: record.employee,
     };
   }
 }

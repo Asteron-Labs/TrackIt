@@ -14,6 +14,7 @@ import { MyTaskFilter } from './tasks.repository';
 import {
   CreateTaskDto,
   MyTaskProjection,
+  TaskEffortResult,
   TaskProjection,
   TaskService,
   UpdateTaskDto,
@@ -83,6 +84,29 @@ const taskService = {
   async getTask(taskId: string): Promise<TaskProjection> {
     if (taskId === MISSING_TASK_ID) throw new NotFoundError('Task not found');
     return taskProjection({ id: taskId });
+  },
+  async getTaskEffort(taskId: string): Promise<TaskEffortResult> {
+    if (taskId === FORBIDDEN_TASK_ID) throw new ForbiddenError();
+    return {
+      estimatedHours: 8,
+      actualHours: 10,
+      variance: 2,
+      variancePercent: 25,
+      varianceStatus: 'OVERRUN',
+      entries: [
+        {
+          id: 'effort-entry-id',
+          employeeId: EMPLOYEE_ID,
+          taskId,
+          workDate: '2026-08-08',
+          hoursSpent: 10,
+          workNote: 'Implemented effort totals',
+          createdAt: new Date('2026-08-08T08:00:00.000Z'),
+          updatedAt: new Date('2026-08-08T08:00:00.000Z'),
+          employee: { id: EMPLOYEE_ID, name: 'Alex Employee' },
+        },
+      ],
+    };
   },
   async updateTask(_taskId: string, dto: UpdateTaskDto): Promise<TaskProjection> {
     return taskProjection(dto);
@@ -260,6 +284,43 @@ test('GET /tasks/mine rejects invalid filters and requires authentication', asyn
   assert.equal(invalidStatusResponse.status, 400);
   assert.equal(invalidDateResponse.status, 400);
   assert.equal(unauthenticatedResponse.status, 401);
+});
+
+for (const role of [UserRole.SUPER_ADMIN, UserRole.TEAM_LEAD]) {
+  test(`GET /tasks/:id/effort returns effort details for ${role}`, async () => {
+    const response = await fetch(`${baseUrl}/tasks/${TASK_ID}/effort`, {
+      headers: authorizationHeader(role),
+    });
+    const body = (await response.json()) as { effort: TaskEffortResult };
+
+    assert.equal(response.status, 200);
+    assert.equal(body.effort.actualHours, 10);
+    assert.equal(body.effort.variance, 2);
+    assert.equal(body.effort.varianceStatus, 'OVERRUN');
+    assert.equal(body.effort.entries[0].employee.name, 'Alex Employee');
+  });
+}
+
+test('GET /tasks/:id/effort protects employee timesheet privacy', async () => {
+  const employeeResponse = await fetch(`${baseUrl}/tasks/${TASK_ID}/effort`, {
+    headers: authorizationHeader(UserRole.EMPLOYEE),
+  });
+  const unauthenticatedResponse = await fetch(`${baseUrl}/tasks/${TASK_ID}/effort`);
+
+  assert.equal(employeeResponse.status, 403);
+  assert.equal(unauthenticatedResponse.status, 401);
+});
+
+test('GET /tasks/:id/effort validates task scope and identifier', async () => {
+  const forbiddenResponse = await fetch(`${baseUrl}/tasks/${FORBIDDEN_TASK_ID}/effort`, {
+    headers: authorizationHeader(UserRole.TEAM_LEAD),
+  });
+  const invalidIdResponse = await fetch(`${baseUrl}/tasks/not-a-uuid/effort`, {
+    headers: authorizationHeader(UserRole.TEAM_LEAD),
+  });
+
+  assert.equal(forbiddenResponse.status, 403);
+  assert.equal(invalidIdResponse.status, 400);
 });
 
 test('GET /tasks/:id returns task details and service errors', async () => {

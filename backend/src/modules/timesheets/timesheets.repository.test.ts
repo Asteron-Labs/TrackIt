@@ -3,6 +3,7 @@ import test from 'node:test';
 import { DataSource } from 'typeorm';
 import { Goal } from '../goals/goals.entity';
 import { Task } from '../tasks/tasks.entity';
+import { User } from '../users/users.entity';
 import { TimesheetEntry } from './timesheets.entity';
 import { TimesheetRepository } from './timesheets.repository';
 
@@ -114,22 +115,17 @@ function createRepository(
   };
 }
 
-test('find methods scope entries by employee, task, and date', async () => {
+test('find methods scope entries by employee and date', async () => {
   const { repository, findCalls, findOneCalls } = createRepository();
 
   await repository.findByEmployeeAndDate('employee-id', '2026-08-07');
   await repository.findByEmployeeAndTaskAndDate('employee-id', 'task-id', '2026-08-07');
   await repository.findById('entry-id');
-  await repository.findByTask('task-id');
 
   assert.deepEqual(findCalls, [
     {
       where: { employeeId: 'employee-id', workDate: '2026-08-07' },
       order: { createdAt: 'ASC' },
-    },
-    {
-      where: { taskId: 'task-id' },
-      order: { workDate: 'DESC', createdAt: 'DESC' },
     },
   ]);
   assert.deepEqual(findOneCalls, [
@@ -170,15 +166,57 @@ test('delete removes the requested entry', async () => {
   assert.deepEqual(deleteCalls, ['entry-id']);
 });
 
-test('sumHoursByTask filters by task and converts the decimal result', async () => {
-  const { repository, whereClauses } = createRepository('7.50');
+test('findByTask scopes in SQL and includes contributor identity', async () => {
+  const entry = { id: 'entry-id', taskId: 'task-id' } as TimesheetEntry;
+  const setup = createRepository(
+    '0',
+    [{ contributor_id: 'employee-id', contributor_name: 'Alex Employee' }],
+    [entry],
+  );
 
-  const total = await repository.sumHoursByTask('task-id');
+  const entries = await setup.repository.findByTask('task-id');
 
-  assert.equal(total, 7.5);
-  assert.deepEqual(whereClauses, [
+  assert.deepEqual(entries, [
+    {
+      entry,
+      employee: { id: 'employee-id', name: 'Alex Employee' },
+    },
+  ]);
+  assert.deepEqual(setup.joins, [
+    [User, 'employee', 'employee.id = entry.employee_id'],
+  ]);
+  assert.deepEqual(setup.whereClauses, [
     { clause: 'entry.task_id = :taskId', parameters: { taskId: 'task-id' } },
   ]);
+});
+
+test('sumHoursByTaskIds groups one query and keeps zeroes for tasks without entries', async () => {
+  const setup = createRepository('0', [
+    { taskId: 'task-one', totalHours: '7.50' },
+  ]);
+
+  const totals = await setup.repository.sumHoursByTaskIds(['task-one', 'task-two']);
+
+  assert.deepEqual([...totals], [
+    ['task-one', 7.5],
+    ['task-two', 0],
+  ]);
+  assert.deepEqual(setup.whereClauses, [
+    {
+      clause: 'entry.task_id IN (:...taskIds)',
+      parameters: { taskIds: ['task-one', 'task-two'] },
+    },
+  ]);
+  assert.deepEqual(setup.groupClauses, ['entry.task_id']);
+});
+
+test('sumHoursByTaskIds skips the query for an empty task set', async () => {
+  const setup = createRepository();
+
+  const totals = await setup.repository.sumHoursByTaskIds([]);
+
+  assert.deepEqual([...totals], []);
+  assert.deepEqual(setup.whereClauses, []);
 });
 
 test('sumHoursByEmployeeInRange uses inclusive date boundaries', async () => {
@@ -244,6 +282,54 @@ test('findByEmployeeInRange scopes in SQL, joins task and goal, and includes the
   assert.deepEqual(setup.orderClauses, [
     ['entry.work_date', 'DESC'],
     ['entry.created_at', 'DESC'],
+  ]);
+});
+
+test('findByTeamInRange scopes through the task goal and returns member details', async () => {
+  const boundaryEntry = { id: 'entry-id', workDate: '2026-08-07' } as TimesheetEntry;
+  const setup = createRepository(
+    '0',
+    [
+      {
+        team_employee_id: 'employee-id',
+        team_employee_name: 'Alex Employee',
+        team_task_id: 'task-id',
+        team_task_title: 'Implement effort view',
+        team_goal_id: 'goal-id',
+        team_goal_title: 'Track delivery',
+      },
+    ],
+    [boundaryEntry],
+  );
+
+  const entries = await setup.repository.findByTeamInRange(
+    'team-id',
+    '2026-08-01',
+    '2026-08-07',
+  );
+
+  assert.deepEqual(entries[0], {
+    entry: boundaryEntry,
+    employee: { id: 'employee-id', name: 'Alex Employee' },
+    task: { id: 'task-id', title: 'Implement effort view' },
+    goal: { id: 'goal-id', title: 'Track delivery' },
+  });
+  assert.deepEqual(setup.joins, [
+    [Task, 'task', 'task.id = entry.task_id'],
+    [Goal, 'goal', 'goal.id = task.goal_id'],
+    [User, 'employee', 'employee.id = entry.employee_id'],
+  ]);
+  assert.deepEqual(setup.whereClauses, [
+    { clause: 'goal.team_id = :teamId', parameters: { teamId: 'team-id' } },
+    {
+      clause: 'entry.work_date BETWEEN :from AND :to',
+      parameters: { from: '2026-08-01', to: '2026-08-07' },
+    },
+  ]);
+  assert.deepEqual(setup.orderClauses, [
+    ['employee.name', 'ASC'],
+    ['entry.work_date', 'DESC'],
+    ['task.title', 'ASC'],
   ]);
 });
 

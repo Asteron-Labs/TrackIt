@@ -105,6 +105,14 @@ export function TeamDetailsPage() {
                 >
                   View team goals
                 </Link>
+                {user?.role === "TEAM_LEAD" && (
+                  <Link
+                    className="secondary-link"
+                    to={`/teams/${team.id}/timesheets`}
+                  >
+                    View team timesheets
+                  </Link>
+                )}
               </div>
             </header>
 

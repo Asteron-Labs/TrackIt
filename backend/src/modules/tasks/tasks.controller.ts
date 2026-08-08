@@ -112,6 +112,20 @@ export function createTasksRouter(taskService: TaskService, requireAuth: Request
     },
   );
 
+  tasksRouter.get(
+    '/tasks/:id/effort',
+    requireRole(UserRole.SUPER_ADMIN, UserRole.TEAM_LEAD),
+    validate({ params: taskIdSchema }),
+    async (req, res, next) => {
+      try {
+        const effort = await taskService.getTaskEffort(req.params.id, req.user!);
+        res.status(200).json({ effort });
+      } catch (error) {
+        next(error);
+      }
+    },
+  );
+
   tasksRouter.get('/tasks/:id', validate({ params: taskIdSchema }), async (req, res, next) => {
     try {
       const task = await taskService.getTask(req.params.id, req.user!);

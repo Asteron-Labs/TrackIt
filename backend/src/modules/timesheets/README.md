@@ -18,6 +18,8 @@ task on one date.
 - Employee history is always bounded to an inclusive date range of at most
   `MAX_TIMESHEET_HISTORY_RANGE_DAYS`. An omitted range means the current Monday-to-Sunday week.
 - History entries and their daily and per-task totals are scoped to the employee in SQL.
+- A Team Lead may read entries for the team they lead, with team and date scope applied in SQL.
+- Task effort entries include contributor identity so a visible total can be traced to its parts.
 
 ## Public service methods
 
@@ -28,14 +30,20 @@ task on one date.
 - `TimesheetService.deleteEntry(entryId, caller)` checks ownership and deletes the entry.
 - `TimesheetService.getMyHistory(callerId, range)` resolves and validates the bounded range, then
   returns joined entries plus daily and per-task totals.
+- `TimesheetService.getTaskEffortSource(taskId)` returns a grouped task total and its contributing
+  entries for the task module.
+- `TimesheetService.getTeamTimesheets(teamId, range, caller)` checks Team Lead scope and returns
+  joined entries across the team for the bounded range.
 
 ## Repository methods
 
 - `create`, `update`, and `delete` persist time entries.
 - `findById` supports ownership checks for edits and deletions.
 - `findByEmployeeAndDate` and `findByEmployeeAndTaskAndDate` support daily validation and upsert.
-- `findByTask`, `sumHoursByTask`, and `sumHoursByEmployeeInRange` provide the reads required by
-  later effort and timesheet views.
+- `findByTask`, `sumHoursByTaskIds`, and `sumHoursByEmployeeInRange` provide task effort totals and
+  contributing entries without per-task queries.
+- `findByTeamInRange` returns team entries with employee, task, and goal details while enforcing
+  team and date scope in SQL.
 - `findByEmployeeInRange` returns an employee's entries with task and goal details.
 - `sumHoursByEmployeeGroupedByDate` and `sumHoursByEmployeeGroupedByTask` calculate reusable
   server-side history rollups.

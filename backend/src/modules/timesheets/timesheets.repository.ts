@@ -2,6 +2,7 @@ import { DataSource } from 'typeorm';
 import { BaseRepository } from '../../common/repository/base.repository';
 import { Goal } from '../goals/goals.entity';
 import { Task } from '../tasks/tasks.entity';
+import { User } from '../users/users.entity';
 import { TimesheetEntry, TimesheetSubmissionStatus } from './timesheets.entity';
 
 export interface CreateTimesheetRecord {
@@ -24,6 +25,21 @@ export interface TimesheetHistoryEntryRecord {
   goal: {
     id: string;
     title: string;
+  };
+}
+
+export interface TaskTimesheetEntryRecord {
+  entry: TimesheetEntry;
+  employee: {
+    id: string;
+    name: string;
+  };
+}
+
+export interface TeamTimesheetEntryRecord extends TimesheetHistoryEntryRecord {
+  employee: {
+    id: string;
+    name: string;
   };
 }
 
@@ -76,11 +92,64 @@ export class TimesheetRepository extends BaseRepository<TimesheetEntry> {
     return this.repo.findOne({ where: { employeeId, taskId, workDate } });
   }
 
-  findByTask(taskId: string): Promise<TimesheetEntry[]> {
-    return this.repo.find({
-      where: { taskId },
-      order: { workDate: 'DESC', createdAt: 'DESC' },
-    });
+  async findByTask(taskId: string): Promise<TaskTimesheetEntryRecord[]> {
+    const query = this.repo
+      .createQueryBuilder('entry')
+      .innerJoin(User, 'employee', 'employee.id = entry.employee_id')
+      .addSelect('employee.id', 'contributor_id')
+      .addSelect('employee.name', 'contributor_name')
+      .where('entry.task_id = :taskId', { taskId })
+      .orderBy('entry.work_date', 'DESC')
+      .addOrderBy('entry.created_at', 'DESC');
+
+    const { entities, raw } = await query.getRawAndEntities();
+    return entities.map((entry, index) => ({
+      entry,
+      employee: {
+        id: raw[index].contributor_id,
+        name: raw[index].contributor_name,
+      },
+    }));
+  }
+
+  async findByTeamInRange(
+    teamId: string,
+    from: string,
+    to: string,
+  ): Promise<TeamTimesheetEntryRecord[]> {
+    const query = this.repo
+      .createQueryBuilder('entry')
+      .innerJoin(Task, 'task', 'task.id = entry.task_id')
+      .innerJoin(Goal, 'goal', 'goal.id = task.goal_id')
+      .innerJoin(User, 'employee', 'employee.id = entry.employee_id')
+      .addSelect('employee.id', 'team_employee_id')
+      .addSelect('employee.name', 'team_employee_name')
+      .addSelect('task.id', 'team_task_id')
+      .addSelect('task.title', 'team_task_title')
+      .addSelect('goal.id', 'team_goal_id')
+      .addSelect('goal.title', 'team_goal_title')
+      .where('goal.team_id = :teamId', { teamId })
+      .andWhere('entry.work_date BETWEEN :from AND :to', { from, to })
+      .orderBy('employee.name', 'ASC')
+      .addOrderBy('entry.work_date', 'DESC')
+      .addOrderBy('task.title', 'ASC');
+
+    const { entities, raw } = await query.getRawAndEntities();
+    return entities.map((entry, index) => ({
+      entry,
+      employee: {
+        id: raw[index].team_employee_id,
+        name: raw[index].team_employee_name,
+      },
+      task: {
+        id: raw[index].team_task_id,
+        title: raw[index].team_task_title,
+      },
+      goal: {
+        id: raw[index].team_goal_id,
+        title: raw[index].team_goal_title,
+      },
+    }));
   }
 
   async findByEmployeeInRange(
@@ -161,14 +230,22 @@ export class TimesheetRepository extends BaseRepository<TimesheetEntry> {
     }));
   }
 
-  async sumHoursByTask(taskId: string): Promise<number> {
-    const row = await this.repo
-      .createQueryBuilder('entry')
-      .select('COALESCE(SUM(entry.hours_spent), 0)', 'total')
-      .where('entry.task_id = :taskId', { taskId })
-      .getRawOne<{ total: string }>();
+  async sumHoursByTaskIds(taskIds: string[]): Promise<Map<string, number>> {
+    const totalsByTaskId = new Map(taskIds.map((taskId) => [taskId, 0]));
+    if (taskIds.length === 0) return totalsByTaskId;
 
-    return Number(row?.total ?? 0);
+    const rows = await this.repo
+      .createQueryBuilder('entry')
+      .select('entry.task_id', 'taskId')
+      .addSelect('SUM(entry.hours_spent)', 'totalHours')
+      .where('entry.task_id IN (:...taskIds)', { taskIds })
+      .groupBy('entry.task_id')
+      .getRawMany<{ taskId: string; totalHours: string }>();
+
+    for (const row of rows) {
+      totalsByTaskId.set(row.taskId, Number(row.totalHours));
+    }
+    return totalsByTaskId;
   }
 
   async sumHoursByEmployeeInRange(employeeId: string, from: string, to: string): Promise<number> {

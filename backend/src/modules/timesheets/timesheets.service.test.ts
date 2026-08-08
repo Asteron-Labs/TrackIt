@@ -10,7 +10,9 @@ import { TimesheetEntry, TimesheetSubmissionStatus } from './timesheets.entity';
 import {
   CreateTimesheetRecord,
   DailyHoursTotal,
+  TaskTimesheetEntryRecord,
   TaskHoursTotal,
+  TeamTimesheetEntryRecord,
   TimesheetHistoryEntryRecord,
   TimesheetRepository,
   UpdateTimesheetRecord,
@@ -20,6 +22,7 @@ import { TimesheetService } from './timesheets.service';
 const EMPLOYEE_ID = '2894b41a-d903-421b-8cbb-4dbd48c836ab';
 const OTHER_EMPLOYEE_ID = '11111111-1111-4111-8111-111111111111';
 const TASK_ID = 'ce379e12-9464-4f42-9f04-19e04be1b4d1';
+const TEAM_ID = '6bf8cd4f-02af-4211-8e0e-619f888f7381';
 const ENTRY_ID = '756aefc5-fc71-4570-b730-f6677a18ac83';
 const WORK_DATE = '2026-08-07';
 
@@ -56,6 +59,10 @@ interface ServiceSetup {
   historyEntries?: TimesheetHistoryEntryRecord[];
   dailyHistoryTotals?: DailyHoursTotal[];
   taskHistoryTotals?: TaskHoursTotal[];
+  effortTotal?: number;
+  taskEffortEntries?: TaskTimesheetEntryRecord[];
+  teamEntries?: TeamTimesheetEntryRecord[];
+  teamLeadError?: Error;
 }
 
 function createService(setup: ServiceSetup = {}) {
@@ -69,6 +76,7 @@ function createService(setup: ServiceSetup = {}) {
     from: string;
     to: string;
   }> = [];
+  const teamCalls: Array<{ teamId: string; from: string; to: string }> = [];
 
   const taskService = {
     async getTask(): Promise<TaskProjection> {
@@ -134,12 +142,32 @@ function createService(setup: ServiceSetup = {}) {
       historyCalls.push({ method: 'tasks', employeeId, from, to });
       return setup.taskHistoryTotals ?? [];
     },
+    async sumHoursByTaskIds(taskIds: string[]): Promise<Map<string, number>> {
+      calls.push('task-totals');
+      return new Map(taskIds.map((taskId) => [taskId, setup.effortTotal ?? 0]));
+    },
+    async findByTask(): Promise<TaskTimesheetEntryRecord[]> {
+      calls.push('task-entries');
+      return setup.taskEffortEntries ?? [];
+    },
+    async findByTeamInRange(
+      teamId: string,
+      from: string,
+      to: string,
+    ): Promise<TeamTimesheetEntryRecord[]> {
+      teamCalls.push({ teamId, from, to });
+      return setup.teamEntries ?? [];
+    },
   } as unknown as TimesheetRepository;
 
   const scopeService = {
     assertOwnsResource(userId: string, resourceOwnerId: string): void {
       calls.push('ownership');
       if (userId !== resourceOwnerId) throw new ForbiddenError();
+    },
+    async assertTeamLeadOf(): Promise<void> {
+      calls.push('team-scope');
+      if (setup.teamLeadError) throw setup.teamLeadError;
     },
   } as unknown as ScopeService;
 
@@ -150,6 +178,7 @@ function createService(setup: ServiceSetup = {}) {
     updatedRecords,
     deletedIds,
     historyCalls,
+    teamCalls,
   };
 }
 
@@ -453,4 +482,88 @@ test('getMyHistory rejects incomplete, reversed, and excessive ranges before que
     /Date range cannot exceed 90 days/,
   );
   assert.deepEqual(setup.historyCalls, []);
+});
+
+test('getTaskEffortSource returns the grouped total and contributor projections', async () => {
+  const entry = timesheetEntry({ hoursSpent: 7.5 });
+  const setup = createService({
+    effortTotal: 7.5,
+    taskEffortEntries: [
+      {
+        entry,
+        employee: { id: EMPLOYEE_ID, name: 'Alex Employee' },
+      },
+    ],
+  });
+
+  const result = await setup.service.getTaskEffortSource(TASK_ID);
+
+  assert.equal(result.actualHours, 7.5);
+  assert.equal(result.entries[0].hoursSpent, 7.5);
+  assert.deepEqual(result.entries[0].employee, {
+    id: EMPLOYEE_ID,
+    name: 'Alex Employee',
+  });
+  assert.equal('submissionStatus' in result.entries[0], false);
+  assert.deepEqual(setup.calls, ['task-totals', 'task-entries']);
+});
+
+test('getTaskEffortSource returns zero actual hours when a task has no entries', async () => {
+  const result = await createService().service.getTaskEffortSource(TASK_ID);
+
+  assert.equal(result.actualHours, 0);
+  assert.deepEqual(result.entries, []);
+});
+
+test('getTeamTimesheets checks lead scope and returns joined entries in range', async () => {
+  const entry = timesheetEntry();
+  const setup = createService({
+    teamEntries: [
+      {
+        entry,
+        employee: { id: EMPLOYEE_ID, name: 'Alex Employee' },
+        task: { id: TASK_ID, title: 'Implement effort totals' },
+        goal: { id: 'goal-id', title: 'Track delivery' },
+      },
+    ],
+  });
+  const teamLead: AuthenticatedUser = {
+    userId: 'team-lead-id',
+    role: UserRole.TEAM_LEAD,
+  };
+
+  const result = await setup.service.getTeamTimesheets(
+    TEAM_ID,
+    { from: '2026-08-01', to: '2026-08-07' },
+    teamLead,
+  );
+
+  assert.deepEqual(result.range, { from: '2026-08-01', to: '2026-08-07' });
+  assert.deepEqual(result.entries[0].employee, {
+    id: EMPLOYEE_ID,
+    name: 'Alex Employee',
+  });
+  assert.equal(result.entries[0].task.title, 'Implement effort totals');
+  assert.equal(result.entries[0].goal.title, 'Track delivery');
+  assert.deepEqual(setup.calls, ['team-scope']);
+  assert.deepEqual(setup.teamCalls, [
+    { teamId: TEAM_ID, from: '2026-08-01', to: '2026-08-07' },
+  ]);
+});
+
+test('getTeamTimesheets rejects another team before querying entries', async () => {
+  const setup = createService({ teamLeadError: new ForbiddenError() });
+
+  await assert.rejects(
+    () =>
+      setup.service.getTeamTimesheets(
+        TEAM_ID,
+        { from: '2026-08-01', to: '2026-08-07' },
+        { userId: 'other-lead-id', role: UserRole.TEAM_LEAD },
+      ),
+    (error: unknown) => error instanceof ForbiddenError,
+  );
+
+  assert.deepEqual(setup.calls, ['team-scope']);
+  assert.deepEqual(setup.teamCalls, []);
 });
