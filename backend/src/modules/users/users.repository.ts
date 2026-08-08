@@ -15,6 +15,10 @@ export class UserRepository extends BaseRepository<User> {
     return this.repo.findOne({ where: { id } });
   }
 
+  isMemberOfTeam(userId: string, teamId: string): Promise<boolean> {
+    return this.repo.existsBy({ id: userId, teamId });
+  }
+
   save(user: User): Promise<User> {
     return this.repo.save(user);
   }

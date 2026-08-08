@@ -64,6 +64,7 @@ on nothing.
 - An email identifies exactly one user
 - A team name is unique
 - A team has exactly one lead, or none while being set up
+- An employee belongs to at most one team, or none while being set up
 - A team lead must be a member of the team they lead
 - The current lead cannot be removed from the team until a replacement is assigned
 
@@ -253,9 +254,7 @@ in React. This is a data-access rule, not a display rule.
 
 ## Open questions
 
-Two remain unsettled and block the first migration. See the Architecture Decision Records.
+One remains unsettled. See the Architecture Decision Records.
 
-1. **Can an employee belong to more than one team?** The relationship model says one; the
-   join table implies many. Affects every allocation calculation.
-2. **Can a task have more than one assignee?** Currently modelled as a single `assigneeId`.
+1. **Can a task have more than one assignee?** Currently modelled as a single `assigneeId`.
    Changing this later means rewriting every allocation query.

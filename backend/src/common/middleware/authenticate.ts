@@ -40,7 +40,7 @@ export function authenticateToken(
 export function requireAuth(jwtSecret: string): RequestHandler {
   return (req, _res, next) => {
     try {
-      req.authenticatedUser = authenticateToken(req.get('authorization'), jwtSecret);
+      req.user = authenticateToken(req.get('authorization'), jwtSecret);
       next();
     } catch (error) {
       next(error);

@@ -7,9 +7,12 @@ endpoints belong to a later story.
 
 - An email identifies exactly one user.
 - A user has one role: `SUPER_ADMIN`, `TEAM_LEAD`, or `EMPLOYEE`.
+- A user belongs to at most one team and may have no team while company structure is configured.
 - Only bcrypt hashes are stored. Plaintext passwords are never entity fields or database columns.
 
 ## Public service methods
 
 - `UsersService.findByEmail(email)` finds a user for authentication.
 - `UsersService.findById(id)` finds the identity represented by a JWT.
+- `UsersService.isMemberOfTeam(userId, teamId)` reports whether the user belongs to the requested
+  team.

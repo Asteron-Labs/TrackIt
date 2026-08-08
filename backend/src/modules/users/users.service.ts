@@ -11,4 +11,8 @@ export class UsersService {
   findById(id: string): Promise<User | null> {
     return this.userRepository.findById(id);
   }
+
+  isMemberOfTeam(userId: string, teamId: string): Promise<boolean> {
+    return this.userRepository.isMemberOfTeam(userId, teamId);
+  }
 }

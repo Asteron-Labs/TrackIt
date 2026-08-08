@@ -4,7 +4,11 @@ import { validate } from '../../common/middleware/validate';
 import { AuthService } from './auth.service';
 
 const loginSchema = z.object({
-  email: z.string().trim().email().transform((email) => email.toLowerCase()),
+  email: z
+    .string()
+    .trim()
+    .email()
+    .transform((email) => email.toLowerCase()),
   password: z.string().min(1),
 });
 
@@ -22,7 +26,7 @@ export function createAuthRouter(authService: AuthService, requireAuth: RequestH
 
   authRouter.get('/me', requireAuth, async (req, res, next) => {
     try {
-      const user = await authService.getCurrentUser(req.authenticatedUser!.userId);
+      const user = await authService.getCurrentUser(req.user!.userId);
       res.status(200).json({ user });
     } catch (error) {
       next(error);
