@@ -3,7 +3,8 @@ import { z } from 'zod';
 import { requireRole } from '../../common/middleware/authorize';
 import { validate } from '../../common/middleware/validate';
 import { UserRole } from '../users/users.entity';
-import { TaskPriority } from './tasks.entity';
+import { TaskPriority, TaskStatus } from './tasks.entity';
+import { MyTaskFilter } from './tasks.repository';
 import { TaskService } from './tasks.service';
 
 const dateOnlySchema = z
@@ -39,6 +40,19 @@ const updateTaskSchema = z
 const assignTaskSchema = z
   .object({
     assigneeId: z.string().uuid().nullable(),
+  })
+  .strict();
+
+const myTaskFilterSchema = z
+  .object({
+    status: z.nativeEnum(TaskStatus).optional(),
+    dueBefore: dateOnlySchema.optional(),
+  })
+  .strict();
+
+const updateTaskStatusSchema = z
+  .object({
+    status: z.nativeEnum(TaskStatus),
   })
   .strict();
 
@@ -82,6 +96,22 @@ export function createTasksRouter(taskService: TaskService, requireAuth: Request
     },
   );
 
+  tasksRouter.get(
+    '/tasks/mine',
+    validate({ query: myTaskFilterSchema }),
+    async (req, res, next) => {
+      try {
+        const tasks = await taskService.getMyTasks(
+          req.user!.userId,
+          req.query as MyTaskFilter,
+        );
+        res.status(200).json({ tasks });
+      } catch (error) {
+        next(error);
+      }
+    },
+  );
+
   tasksRouter.get('/tasks/:id', validate({ params: taskIdSchema }), async (req, res, next) => {
     try {
       const task = await taskService.getTask(req.params.id, req.user!);
@@ -98,6 +128,19 @@ export function createTasksRouter(taskService: TaskService, requireAuth: Request
     async (req, res, next) => {
       try {
         const task = await taskService.updateTask(req.params.id, req.body, req.user!);
+        res.status(200).json({ task });
+      } catch (error) {
+        next(error);
+      }
+    },
+  );
+
+  tasksRouter.patch(
+    '/tasks/:id/status',
+    validate({ params: taskIdSchema, body: updateTaskStatusSchema }),
+    async (req, res, next) => {
+      try {
+        const task = await taskService.updateStatus(req.params.id, req.body.status, req.user!);
         res.status(200).json({ task });
       } catch (error) {
         next(error);

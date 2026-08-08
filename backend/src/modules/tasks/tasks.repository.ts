@@ -1,5 +1,6 @@
 import { DataSource, SelectQueryBuilder } from 'typeorm';
 import { BaseRepository } from '../../common/repository/base.repository';
+import { Goal } from '../goals/goals.entity';
 import { BusinessImpact, Task, TaskPriority, TaskStatus } from './tasks.entity';
 
 export interface CreateTaskRecord {
@@ -18,6 +19,22 @@ export interface CreateTaskRecord {
 export interface TaskAccessFilter {
   teamId?: string;
   assigneeId?: string;
+}
+
+export interface MyTaskFilter {
+  status?: TaskStatus;
+  dueBefore?: string;
+}
+
+export interface TaskGoalRecord {
+  id: string;
+  title: string;
+  deadline: string;
+}
+
+export interface TaskWithGoalRecord {
+  task: Task;
+  goal: TaskGoalRecord;
 }
 
 export type UpdateTaskRecord = Partial<
@@ -52,13 +69,36 @@ export class TaskRepository extends BaseRepository<Task> {
     return query.getMany();
   }
 
-  findByAssignee(assigneeId: string): Promise<Task[]> {
-    return this.repo
+  async findByAssignee(
+    assigneeId: string,
+    filter: MyTaskFilter = {},
+  ): Promise<TaskWithGoalRecord[]> {
+    const query = this.repo
       .createQueryBuilder('task')
+      .innerJoin(Goal, 'goal', 'goal.id = task.goal_id')
+      .addSelect('goal.id', 'parent_goal_id')
+      .addSelect('goal.title', 'parent_goal_title')
+      .addSelect('goal.deadline', 'parent_goal_deadline')
       .where('task.assignee_id = :assigneeId', { assigneeId })
       .orderBy('task.due_date', 'ASC')
-      .addOrderBy('task.title', 'ASC')
-      .getMany();
+      .addOrderBy('task.title', 'ASC');
+
+    if (filter.status) {
+      query.andWhere('task.status = :status', { status: filter.status });
+    }
+    if (filter.dueBefore) {
+      query.andWhere('task.due_date < :dueBefore', { dueBefore: filter.dueBefore });
+    }
+
+    const { entities, raw } = await query.getRawAndEntities();
+    return entities.map((task, index) => ({
+      task,
+      goal: {
+        id: raw[index].parent_goal_id,
+        title: raw[index].parent_goal_title,
+        deadline: raw[index].parent_goal_deadline,
+      },
+    }));
   }
 
   findByTeam(teamId: string): Promise<Task[]> {
@@ -78,6 +118,11 @@ export class TaskRepository extends BaseRepository<Task> {
 
   async updateAssignee(taskId: string, assigneeId: string | null): Promise<Task> {
     await this.repo.update(taskId, { assigneeId });
+    return this.repo.findOneByOrFail({ id: taskId });
+  }
+
+  async updateStatus(taskId: string, status: TaskStatus): Promise<Task> {
+    await this.repo.update(taskId, { status });
     return this.repo.findOneByOrFail({ id: taskId });
   }
 

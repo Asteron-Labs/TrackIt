@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { DataSource } from 'typeorm';
+import { Goal } from '../goals/goals.entity';
 import { Task, TaskStatus } from './tasks.entity';
 import { TaskRepository } from './tasks.repository';
 
@@ -9,8 +10,8 @@ interface RecordedClause {
   parameters?: Record<string, unknown>;
 }
 
-function createRepository(rawRows: Array<{ status: TaskStatus; count: string }> = []) {
-  const joins: Array<[string, string, string]> = [];
+function createRepository(rawRows: Array<Record<string, unknown>> = [], entities: Task[] = []) {
+  const joins: Array<[unknown, string, string]> = [];
   const whereClauses: RecordedClause[] = [];
   const orderClauses: Array<[string, string]> = [];
   const selectedColumns: Array<[string, string]> = [];
@@ -18,7 +19,7 @@ function createRepository(rawRows: Array<{ status: TaskStatus; count: string }> 
   const updates: Array<{ taskId: string; changes: Partial<Task> }> = [];
   const storedTask = { id: 'task-id', assigneeId: null } as Task;
   const queryBuilder = {
-    innerJoin(table: string, alias: string, condition: string) {
+    innerJoin(table: unknown, alias: string, condition: string) {
       joins.push([table, alias, condition]);
       return this;
     },
@@ -58,6 +59,9 @@ function createRepository(rawRows: Array<{ status: TaskStatus; count: string }> 
     },
     async getRawMany() {
       return rawRows;
+    },
+    async getRawAndEntities() {
+      return { entities, raw: rawRows };
     },
   };
   const dataSource = {
@@ -121,20 +125,57 @@ test('findById remains unrestricted when no access filter is supplied', async ()
   ]);
 });
 
-test('findByAssignee filters in SQL and orders by due date', async () => {
-  const { repository, whereClauses, orderClauses } = createRepository();
+test('findByAssignee joins the parent goal and applies all filters in SQL', async () => {
+  const assignedTask = { id: 'task-id', goalId: 'goal-id' } as Task;
+  const { repository, joins, whereClauses, orderClauses, selectedColumns } = createRepository(
+    [
+      {
+        parent_goal_id: 'goal-id',
+        parent_goal_title: 'Release TrackIt',
+        parent_goal_deadline: '2026-09-10',
+      },
+    ],
+    [assignedTask],
+  );
 
-  await repository.findByAssignee('employee-id');
+  const records = await repository.findByAssignee('employee-id', {
+    status: TaskStatus.IN_PROGRESS,
+    dueBefore: '2026-09-01',
+  });
 
+  assert.deepEqual(joins, [[Goal, 'goal', 'goal.id = task.goal_id']]);
+  assert.deepEqual(selectedColumns, [
+    ['goal.id', 'parent_goal_id'],
+    ['goal.title', 'parent_goal_title'],
+    ['goal.deadline', 'parent_goal_deadline'],
+  ]);
   assert.deepEqual(whereClauses, [
     {
       clause: 'task.assignee_id = :assigneeId',
       parameters: { assigneeId: 'employee-id' },
     },
+    {
+      clause: 'task.status = :status',
+      parameters: { status: TaskStatus.IN_PROGRESS },
+    },
+    {
+      clause: 'task.due_date < :dueBefore',
+      parameters: { dueBefore: '2026-09-01' },
+    },
   ]);
   assert.deepEqual(orderClauses, [
     ['task.due_date', 'ASC'],
     ['task.title', 'ASC'],
+  ]);
+  assert.deepEqual(records, [
+    {
+      task: assignedTask,
+      goal: {
+        id: 'goal-id',
+        title: 'Release TrackIt',
+        deadline: '2026-09-10',
+      },
+    },
   ]);
 });
 
@@ -164,6 +205,15 @@ test('updateAssignee assigns, reassigns, and clears the assignee', async () => {
   assert.equal(assignedTask.id, 'task-id');
   assert.equal(reassignedTask.id, 'task-id');
   assert.equal(unassignedTask.assigneeId, null);
+});
+
+test('updateStatus persists and returns the updated task', async () => {
+  const { repository, updates } = createRepository();
+
+  const updatedTask = await repository.updateStatus('task-id', TaskStatus.DONE);
+
+  assert.deepEqual(updates, [{ taskId: 'task-id', changes: { status: TaskStatus.DONE } }]);
+  assert.equal(updatedTask.status, TaskStatus.DONE);
 });
 
 test('countByGoalAndStatus returns all statuses from one grouped query', async () => {

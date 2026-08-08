@@ -10,11 +10,19 @@ import { errorHandler } from '../../common/middleware/error-handler';
 import { UserRole } from '../users/users.entity';
 import { createTasksRouter } from './tasks.controller';
 import { TaskPriority, TaskStatus } from './tasks.entity';
-import { CreateTaskDto, TaskProjection, TaskService, UpdateTaskDto } from './tasks.service';
+import { MyTaskFilter } from './tasks.repository';
+import {
+  CreateTaskDto,
+  MyTaskProjection,
+  TaskProjection,
+  TaskService,
+  UpdateTaskDto,
+} from './tasks.service';
 
 const JWT_SECRET = 'test-secret-that-is-at-least-32-characters';
 const TASK_ID = 'ce379e12-9464-4f42-9f04-19e04be1b4d1';
 const MISSING_TASK_ID = '11111111-1111-4111-8111-111111111111';
+const FORBIDDEN_TASK_ID = '33333333-3333-4333-8333-333333333333';
 const GOAL_ID = '756aefc5-fc71-4570-b730-f6677a18ac83';
 const OTHER_GOAL_ID = '22222222-2222-4222-8222-222222222222';
 const EMPLOYEE_ID = '2894b41a-d903-421b-8cbb-4dbd48c836ab';
@@ -57,12 +65,35 @@ const taskService = {
   async listGoalTasks(): Promise<TaskProjection[]> {
     return [taskProjection()];
   },
+  async getMyTasks(callerId: string, filter: MyTaskFilter): Promise<MyTaskProjection[]> {
+    return [
+      {
+        id: TASK_ID,
+        goalId: GOAL_ID,
+        title: 'Build the task module',
+        status: filter.status ?? TaskStatus.TODO,
+        priority: TaskPriority.HIGH,
+        estimatedHours: 8,
+        dueDate: filter.dueBefore ? '2026-08-31' : '2026-09-05',
+        overdue: false,
+        goal: { id: GOAL_ID, title: `Release TrackIt for ${callerId}` },
+      },
+    ];
+  },
   async getTask(taskId: string): Promise<TaskProjection> {
     if (taskId === MISSING_TASK_ID) throw new NotFoundError('Task not found');
     return taskProjection({ id: taskId });
   },
   async updateTask(_taskId: string, dto: UpdateTaskDto): Promise<TaskProjection> {
     return taskProjection(dto);
+  },
+  async updateStatus(
+    taskId: string,
+    status: TaskStatus,
+  ): Promise<TaskProjection> {
+    if (taskId === MISSING_TASK_ID) throw new NotFoundError('Task not found');
+    if (taskId === FORBIDDEN_TASK_ID) throw new ForbiddenError();
+    return taskProjection({ status });
   },
   async assignTask(_taskId: string, assigneeId: string | null): Promise<TaskProjection> {
     return taskProjection({
@@ -204,6 +235,33 @@ for (const role of Object.values(UserRole)) {
   });
 }
 
+test('GET /tasks/mine returns the caller-scoped list with validated filters', async () => {
+  const response = await fetch(
+    `${baseUrl}/tasks/mine?status=IN_PROGRESS&dueBefore=2026-09-01`,
+    { headers: authorizationHeader(UserRole.EMPLOYEE) },
+  );
+  const body = (await response.json()) as { tasks: MyTaskProjection[] };
+
+  assert.equal(response.status, 200);
+  assert.equal(body.tasks[0].status, TaskStatus.IN_PROGRESS);
+  assert.equal(body.tasks[0].dueDate, '2026-08-31');
+  assert.match(body.tasks[0].goal.title, /employee-id/);
+});
+
+test('GET /tasks/mine rejects invalid filters and requires authentication', async () => {
+  const invalidStatusResponse = await fetch(`${baseUrl}/tasks/mine?status=STARTED`, {
+    headers: authorizationHeader(UserRole.EMPLOYEE),
+  });
+  const invalidDateResponse = await fetch(`${baseUrl}/tasks/mine?dueBefore=2026-02-30`, {
+    headers: authorizationHeader(UserRole.EMPLOYEE),
+  });
+  const unauthenticatedResponse = await fetch(`${baseUrl}/tasks/mine`);
+
+  assert.equal(invalidStatusResponse.status, 400);
+  assert.equal(invalidDateResponse.status, 400);
+  assert.equal(unauthenticatedResponse.status, 401);
+});
+
 test('GET /tasks/:id returns task details and service errors', async () => {
   const taskResponse = await fetch(`${baseUrl}/tasks/${TASK_ID}`, {
     headers: authorizationHeader(UserRole.EMPLOYEE),
@@ -270,6 +328,82 @@ test('PATCH /tasks/:id rejects empty bodies, invalid estimates, and Employees', 
   assert.equal(invalidEstimateResponse.status, 400);
   assert.equal(protectedFieldResponse.status, 400);
   assert.equal(employeeResponse.status, 403);
+});
+
+for (const role of Object.values(UserRole)) {
+  test(`PATCH /tasks/:id/status allows an authorized ${role}`, async () => {
+    const response = await fetch(`${baseUrl}/tasks/${TASK_ID}/status`, {
+      method: 'PATCH',
+      headers: {
+        ...authorizationHeader(role),
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ status: TaskStatus.DONE }),
+    });
+    const body = (await response.json()) as { task: TaskProjection };
+
+    assert.equal(response.status, 200);
+    assert.equal(body.task.status, TaskStatus.DONE);
+  });
+}
+
+test('PATCH /tasks/:id/status validates the body and returns service authorization errors', async () => {
+  const invalidStatusResponse = await fetch(`${baseUrl}/tasks/${TASK_ID}/status`, {
+    method: 'PATCH',
+    headers: {
+      ...authorizationHeader(UserRole.EMPLOYEE),
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({ status: 'STARTED' }),
+  });
+  const protectedFieldResponse = await fetch(`${baseUrl}/tasks/${TASK_ID}/status`, {
+    method: 'PATCH',
+    headers: {
+      ...authorizationHeader(UserRole.EMPLOYEE),
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({ status: TaskStatus.DONE, title: 'Not allowed' }),
+  });
+  const forbiddenResponse = await fetch(`${baseUrl}/tasks/${FORBIDDEN_TASK_ID}/status`, {
+    method: 'PATCH',
+    headers: {
+      ...authorizationHeader(UserRole.EMPLOYEE),
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({ status: TaskStatus.DONE }),
+  });
+  const missingResponse = await fetch(`${baseUrl}/tasks/${MISSING_TASK_ID}/status`, {
+    method: 'PATCH',
+    headers: {
+      ...authorizationHeader(UserRole.SUPER_ADMIN),
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({ status: TaskStatus.DONE }),
+  });
+
+  assert.equal(invalidStatusResponse.status, 400);
+  assert.equal(protectedFieldResponse.status, 400);
+  assert.equal(forbiddenResponse.status, 403);
+  assert.equal(missingResponse.status, 404);
+});
+
+test('PATCH /tasks/:id/status validates the task UUID and requires authentication', async () => {
+  const invalidIdResponse = await fetch(`${baseUrl}/tasks/not-a-uuid/status`, {
+    method: 'PATCH',
+    headers: {
+      ...authorizationHeader(UserRole.EMPLOYEE),
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({ status: TaskStatus.DONE }),
+  });
+  const unauthenticatedResponse = await fetch(`${baseUrl}/tasks/${TASK_ID}/status`, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ status: TaskStatus.DONE }),
+  });
+
+  assert.equal(invalidIdResponse.status, 400);
+  assert.equal(unauthenticatedResponse.status, 401);
 });
 
 test('PUT /tasks/:id/assignee assigns and unassigns for a Team Lead', async () => {

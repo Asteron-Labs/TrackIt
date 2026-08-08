@@ -5,7 +5,13 @@ import { GoalProjection, GoalService } from '../goals/goals.service';
 import { TeamMemberProjection, TeamsService } from '../teams/teams.service';
 import { UserRole } from '../users/users.entity';
 import { BusinessImpact, Task, TaskPriority, TaskStatus } from './tasks.entity';
-import { TaskAccessFilter, TaskRepository, UpdateTaskRecord } from './tasks.repository';
+import {
+  MyTaskFilter,
+  TaskAccessFilter,
+  TaskRepository,
+  TaskWithGoalRecord,
+  UpdateTaskRecord,
+} from './tasks.repository';
 
 export interface CreateTaskDto {
   title: string;
@@ -41,6 +47,21 @@ export interface TaskProjection {
   dueDatePastGoalDeadline: boolean;
   createdAt: Date;
   updatedAt: Date;
+}
+
+export interface MyTaskProjection {
+  id: string;
+  goalId: string;
+  title: string;
+  status: TaskStatus;
+  priority: TaskPriority;
+  estimatedHours: number;
+  dueDate: string;
+  overdue: boolean;
+  goal: {
+    id: string;
+    title: string;
+  };
 }
 
 export function isTaskOverdue(dueDate: string, status: TaskStatus, today: string): boolean {
@@ -90,6 +111,12 @@ export class TaskService {
     return tasks.map((task) => this.toProjection(task, goal.deadline, assignees));
   }
 
+  async getMyTasks(callerId: string, filter: MyTaskFilter): Promise<MyTaskProjection[]> {
+    const records = await this.taskRepository.findByAssignee(callerId, filter);
+    const today = new Date().toISOString().slice(0, 10);
+    return records.map((record) => this.toMyTaskProjection(record, today));
+  }
+
   async getTask(taskId: string, caller: AuthenticatedUser): Promise<TaskProjection> {
     const existingTask = await this.taskRepository.findById(taskId);
     if (!existingTask) {
@@ -133,6 +160,29 @@ export class TaskService {
     }
 
     const updatedTask = await this.taskRepository.update(taskId, dto as UpdateTaskRecord);
+    const assignees = await this.loadAssignees(goal, [updatedTask], caller);
+    return this.toProjection(updatedTask, goal.deadline, assignees);
+  }
+
+  async updateStatus(
+    taskId: string,
+    status: TaskStatus,
+    caller: AuthenticatedUser,
+  ): Promise<TaskProjection> {
+    const task = await this.taskRepository.findById(taskId);
+    if (!task) {
+      throw new NotFoundError('Task not found');
+    }
+
+    const goal = await this.goalService.getGoal(task.goalId, caller);
+    if (caller.role === UserRole.EMPLOYEE) {
+      if (!task.assigneeId) {
+        throw new ForbiddenError('You can only update your own assigned tasks');
+      }
+      this.scopeService.assertOwnsResource(caller.userId, task.assigneeId);
+    }
+
+    const updatedTask = await this.taskRepository.updateStatus(taskId, status);
     const assignees = await this.loadAssignees(goal, [updatedTask], caller);
     return this.toProjection(updatedTask, goal.deadline, assignees);
   }
@@ -216,6 +266,23 @@ export class TaskService {
       dueDatePastGoalDeadline: task.dueDate > goalDeadline,
       createdAt: task.createdAt,
       updatedAt: task.updatedAt,
+    };
+  }
+
+  private toMyTaskProjection(record: TaskWithGoalRecord, today: string): MyTaskProjection {
+    return {
+      id: record.task.id,
+      goalId: record.task.goalId,
+      title: record.task.title,
+      status: record.task.status,
+      priority: record.task.priority,
+      estimatedHours: record.task.estimatedHours,
+      dueDate: record.task.dueDate,
+      overdue: isTaskOverdue(record.task.dueDate, record.task.status, today),
+      goal: {
+        id: record.goal.id,
+        title: record.goal.title,
+      },
     };
   }
 }

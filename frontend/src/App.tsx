@@ -3,6 +3,7 @@ import { ProtectedRoute } from "./auth/ProtectedRoute";
 import { HomePage } from "./pages/HomePage";
 import { GoalDetailsPage } from "./pages/GoalDetailsPage";
 import { LoginPage } from "./pages/LoginPage";
+import { MyTasksPage } from "./pages/MyTasksPage";
 import { TeamDetailsPage } from "./pages/TeamDetailsPage";
 import { TeamGoalsPage } from "./pages/TeamGoalsPage";
 import { TaskDetailsPage } from "./pages/TaskDetailsPage";
@@ -17,6 +18,7 @@ export function App() {
         <Route path="/" element={<HomePage />} />
         <Route path="/goals" element={<TeamGoalsPage />} />
         <Route path="/goals/:id" element={<GoalDetailsPage />} />
+        <Route path="/tasks" element={<MyTasksPage />} />
         <Route path="/tasks/:id" element={<TaskDetailsPage />} />
         <Route element={<ProtectedRoute allowedRoles={["SUPER_ADMIN"]} />}>
           <Route path="/users" element={<UsersPage />} />

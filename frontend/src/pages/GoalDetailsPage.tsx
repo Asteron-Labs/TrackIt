@@ -91,6 +91,8 @@ export function GoalDetailsPage() {
   const canCreateTasks =
     user?.role === "SUPER_ADMIN" || user?.role === "TEAM_LEAD";
   const canAssignTasks = user?.role === "TEAM_LEAD";
+  const canChangeTaskStatus =
+    user?.role === "SUPER_ADMIN" || user?.role === "TEAM_LEAD";
 
   return (
     <div className="app-shell">
@@ -183,7 +185,8 @@ export function GoalDetailsPage() {
                   tasks={tasks}
                   members={teamMembers}
                   canAssign={canAssignTasks}
-                  onAssignmentChanged={replaceTask}
+                  canChangeStatus={canChangeTaskStatus}
+                  onTaskChanged={replaceTask}
                 />
               </section>
             </div>

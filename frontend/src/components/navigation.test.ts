@@ -18,7 +18,7 @@ test("each role has its own navigation menu and human-readable label", () => {
   ]);
   assert.deepEqual(menuItemsByRole.EMPLOYEE, [
     { label: "Team Goals", path: "/goals" },
-    { label: "My Tasks" },
+    { label: "My Tasks", path: "/tasks" },
     { label: "My Timesheets" },
   ]);
   assert.deepEqual(roleLabels, {
