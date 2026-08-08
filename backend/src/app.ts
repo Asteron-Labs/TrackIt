@@ -6,6 +6,9 @@ import { env } from './common/config';
 import { AppDataSource } from './data-source';
 import { createAuthRouter } from './modules/auth/auth.controller';
 import { AuthService } from './modules/auth/auth.service';
+import { createTeamsRouter } from './modules/teams/teams.controller';
+import { TeamRepository } from './modules/teams/teams.repository';
+import { TeamsService } from './modules/teams/teams.service';
 import { createUsersRouter } from './modules/users/users.controller';
 import { UserRepository } from './modules/users/users.repository';
 import { UsersService } from './modules/users/users.service';
@@ -22,11 +25,13 @@ export function createApp(): Express {
   app.use(healthRouter);
 
   const usersService = new UsersService(new UserRepository(AppDataSource));
+  const teamsService = new TeamsService(new TeamRepository(AppDataSource));
   const authService = new AuthService(usersService, env.JWT_SECRET);
   const authenticationMiddleware = requireAuth(env.JWT_SECRET);
 
   app.use('/auth', createAuthRouter(authService, authenticationMiddleware));
   app.use('/users', createUsersRouter(usersService, authenticationMiddleware));
+  app.use('/teams', createTeamsRouter(teamsService, authenticationMiddleware));
 
   app.use(notFoundHandler);
   app.use(errorHandler);

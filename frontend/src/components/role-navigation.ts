@@ -8,13 +8,13 @@ export interface MenuItem {
 export const menuItemsByRole: Record<UserRole, MenuItem[]> = {
   SUPER_ADMIN: [
     { label: 'Users', path: '/users' },
-    { label: 'Teams' },
+    { label: 'Teams', path: '/teams' },
     { label: 'Goals and Tasks' },
     { label: 'Timesheets' },
     { label: 'Company Dashboard' },
   ],
   TEAM_LEAD: [
-    { label: 'My Team' },
+    { label: 'My Team', path: '/teams' },
     { label: 'Goals and Tasks' },
     { label: 'Team Timesheets' },
     { label: 'Team Dashboard' },

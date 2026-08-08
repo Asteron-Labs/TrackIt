@@ -5,13 +5,13 @@ import { menuItemsByRole, roleLabels } from './role-navigation.ts';
 test('each role has its own navigation menu and human-readable label', () => {
   assert.deepEqual(menuItemsByRole.SUPER_ADMIN, [
     { label: 'Users', path: '/users' },
-    { label: 'Teams' },
+    { label: 'Teams', path: '/teams' },
     { label: 'Goals and Tasks' },
     { label: 'Timesheets' },
     { label: 'Company Dashboard' },
   ]);
   assert.deepEqual(menuItemsByRole.TEAM_LEAD, [
-    { label: 'My Team' },
+    { label: 'My Team', path: '/teams' },
     { label: 'Goals and Tasks' },
     { label: 'Team Timesheets' },
     { label: 'Team Dashboard' },

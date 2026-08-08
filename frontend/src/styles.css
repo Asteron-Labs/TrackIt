@@ -25,7 +25,8 @@ body {
 
 button,
 input,
-select {
+select,
+textarea {
   font: inherit;
 }
 
@@ -111,7 +112,8 @@ label {
 }
 
 input,
-select {
+select,
+textarea {
   width: 100%;
   padding: 12px 14px;
   color: #17231e;
@@ -122,9 +124,14 @@ select {
 }
 
 input:focus,
-select:focus {
+select:focus,
+textarea:focus {
   border-color: #2d7d59;
   box-shadow: 0 0 0 3px rgba(45, 125, 89, 0.14);
+}
+
+textarea {
+  resize: vertical;
 }
 
 .form-error {
@@ -266,7 +273,9 @@ select:focus {
   padding: clamp(48px, 8vw, 100px);
 }
 
-.users-page {
+.users-page,
+.teams-page,
+.team-details-page {
   min-width: 0;
   padding: clamp(36px, 5vw, 72px);
 }
@@ -285,7 +294,8 @@ select:focus {
   line-height: 1.6;
 }
 
-.users-layout {
+.users-layout,
+.teams-layout {
   display: grid;
   grid-template-columns: minmax(280px, 360px) minmax(0, 1fr);
   align-items: start;
@@ -309,11 +319,13 @@ select:focus {
   margin-bottom: 22px;
 }
 
-.user-form {
+.user-form,
+.team-form {
   gap: 9px;
 }
 
-.user-form-panel {
+.user-form-panel,
+.team-form-panel {
   position: sticky;
   top: 24px;
 }
@@ -345,28 +357,111 @@ select:focus {
   overflow-x: auto;
 }
 
-.users-table {
+.users-table,
+.teams-table,
+.members-table {
   width: 100%;
   border-collapse: collapse;
   font-size: 14px;
 }
 
 .users-table th,
-.users-table td {
+.users-table td,
+.teams-table th,
+.teams-table td,
+.members-table th,
+.members-table td {
   padding: 13px 12px;
   text-align: left;
   border-bottom: 1px solid #e3ebe6;
 }
 
-.users-table th {
+.users-table th,
+.teams-table th,
+.members-table th {
   color: #506159;
   font-size: 12px;
   letter-spacing: 0.06em;
   text-transform: uppercase;
 }
 
-.users-table tbody tr:last-child td {
+.users-table tbody tr:last-child td,
+.teams-table tbody tr:last-child td,
+.members-table tbody tr:last-child td {
   border-bottom: 0;
+}
+
+.team-link,
+.back-link {
+  color: #1f6848;
+  font-weight: 750;
+  text-decoration: none;
+}
+
+.team-link:hover,
+.back-link:hover {
+  text-decoration: underline;
+}
+
+.back-link {
+  display: inline-block;
+  margin-bottom: 26px;
+}
+
+.team-details-heading {
+  align-items: end;
+}
+
+.capacity-summary {
+  flex: 0 0 auto;
+  display: grid;
+  min-width: 180px;
+  padding: 18px 20px;
+  background: #e9f4ed;
+  border-radius: 12px;
+}
+
+.capacity-summary strong {
+  color: #1f6848;
+  font-size: 30px;
+}
+
+.capacity-summary span,
+.person-summary span {
+  color: #64736b;
+  font-size: 14px;
+}
+
+.team-details-grid {
+  display: grid;
+  grid-template-columns: minmax(240px, 320px) minmax(0, 1fr);
+  align-items: start;
+  gap: 24px;
+}
+
+.person-summary {
+  display: grid;
+  gap: 5px;
+  padding-top: 12px;
+}
+
+.empty-state {
+  margin: 20px 0 0;
+  padding: 18px;
+  color: #64736b;
+  background: #f4f7f5;
+  border-radius: 9px;
+  text-align: center;
+}
+
+.member-count {
+  padding: 6px 10px;
+  color: #225d42;
+  background: #e9f4ed;
+  border-radius: 999px;
+  font-size: 13px;
+  font-weight: 750;
+  white-space: nowrap;
 }
 
 .role-badge {
@@ -381,11 +476,14 @@ select:focus {
 }
 
 @media (max-width: 1080px) {
-  .users-layout {
+  .users-layout,
+  .teams-layout,
+  .team-details-grid {
     grid-template-columns: 1fr;
   }
 
-  .user-form-panel {
+  .user-form-panel,
+  .team-form-panel {
     position: static;
   }
 }
@@ -411,8 +509,19 @@ select:focus {
     padding: 40px 24px;
   }
 
-  .users-page {
+  .users-page,
+  .teams-page,
+  .team-details-page {
     padding: 36px 20px;
+  }
+
+  .team-details-heading {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .capacity-summary {
+    width: 100%;
   }
 
   .list-heading {
