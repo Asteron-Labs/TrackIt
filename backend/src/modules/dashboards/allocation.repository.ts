@@ -8,8 +8,12 @@ export interface EmployeeWorkloadData {
   activeTaskCount: number;
   estimatedHoursOnActiveTasks: number;
   recordedHours: number;
-  completedTaskCount: number;
-  overdueTaskCount: number;
+}
+
+export interface TeamTaskData {
+  taskId: string;
+  status: TaskStatus;
+  dueDate: string;
 }
 
 interface EmployeeWorkloadRow {
@@ -19,8 +23,6 @@ interface EmployeeWorkloadRow {
   activeTaskCount: string;
   estimatedHoursOnActiveTasks: string;
   recordedHours: string;
-  completedTaskCount: string;
-  overdueTaskCount: string;
 }
 
 export class AllocationRepository {
@@ -40,11 +42,7 @@ export class AllocationRepository {
             COALESCE(
               SUM(task.estimated_hours) FILTER (WHERE task.status <> $4),
               0
-            ) AS estimated_hours_on_active_tasks,
-            COUNT(*) FILTER (WHERE task.status = $4) AS completed_task_count,
-            COUNT(*) FILTER (
-              WHERE task.due_date < CURRENT_DATE AND task.status <> $4
-            ) AS overdue_task_count
+            ) AS estimated_hours_on_active_tasks
           FROM tasks task
           INNER JOIN goals goal ON goal.id = task.goal_id
           WHERE goal.team_id = $1 AND task.assignee_id IS NOT NULL
@@ -67,9 +65,7 @@ export class AllocationRepository {
           COALESCE(task_metrics.active_task_count, 0) AS "activeTaskCount",
           COALESCE(task_metrics.estimated_hours_on_active_tasks, 0)
             AS "estimatedHoursOnActiveTasks",
-          COALESCE(timesheet_metrics.recorded_hours, 0) AS "recordedHours",
-          COALESCE(task_metrics.completed_task_count, 0) AS "completedTaskCount",
-          COALESCE(task_metrics.overdue_task_count, 0) AS "overdueTaskCount"
+          COALESCE(timesheet_metrics.recorded_hours, 0) AS "recordedHours"
         FROM team_members membership
         INNER JOIN users employee ON employee.id = membership.user_id
         INNER JOIN teams team ON team.id = membership.team_id
@@ -88,8 +84,25 @@ export class AllocationRepository {
       activeTaskCount: Number(row.activeTaskCount),
       estimatedHoursOnActiveTasks: Number(row.estimatedHoursOnActiveTasks),
       recordedHours: Number(row.recordedHours),
-      completedTaskCount: Number(row.completedTaskCount),
-      overdueTaskCount: Number(row.overdueTaskCount),
     }));
+  }
+
+  async getTeamTaskData(teamId: string): Promise<TeamTaskData[]> {
+    const rows = await this.dataSource.query<
+      Array<{ taskId: string; status: TaskStatus; dueDate: string }>
+    >(
+      `
+        SELECT
+          task.id AS "taskId",
+          task.status AS "status",
+          task.due_date AS "dueDate"
+        FROM tasks task
+        INNER JOIN goals goal ON goal.id = task.goal_id
+        WHERE goal.team_id = $1
+      `,
+      [teamId],
+    );
+
+    return rows;
   }
 }

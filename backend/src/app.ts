@@ -26,6 +26,9 @@ import { TimesheetService } from './modules/timesheets/timesheets.service';
 import { createUsersRouter } from './modules/users/users.controller';
 import { UserRepository } from './modules/users/users.repository';
 import { UsersService } from './modules/users/users.service';
+import { createAllocationRouter } from './modules/dashboards/allocation.controller';
+import { AllocationRepository } from './modules/dashboards/allocation.repository';
+import { AllocationService } from './modules/dashboards/allocation.service';
 
 /**
  * Builds the Express application: shared middleware, routes, then the terminal
@@ -65,10 +68,16 @@ export function createApp(): Express {
   );
   const authService = new AuthService(usersService, env.JWT_SECRET);
   const authenticationMiddleware = requireAuth(env.JWT_SECRET);
+  const allocationService = new AllocationService(
+    new AllocationRepository(AppDataSource),
+    goalService,
+    scopeService,
+  );
 
   app.use('/auth', createAuthRouter(authService, authenticationMiddleware));
   app.use('/users', createUsersRouter(usersService, authenticationMiddleware));
   app.use('/teams', createTeamsRouter(teamsService, authenticationMiddleware));
+  app.use('/teams', createAllocationRouter(allocationService, authenticationMiddleware));
   app.use(createGoalsRouter(goalService, authenticationMiddleware));
   app.use(createTasksRouter(taskService, authenticationMiddleware));
   app.use(

@@ -33,8 +33,6 @@ test('getEmployeeWorkloadData maps workload aggregates to numbers', async () => 
       activeTaskCount: '5',
       estimatedHoursOnActiveTasks: '42',
       recordedHours: '30.5',
-      completedTaskCount: '2',
-      overdueTaskCount: '1',
     },
   ]);
 
@@ -52,8 +50,6 @@ test('getEmployeeWorkloadData maps workload aggregates to numbers', async () => 
       activeTaskCount: 5,
       estimatedHoursOnActiveTasks: 42,
       recordedHours: 30.5,
-      completedTaskCount: 2,
-      overdueTaskCount: 1,
     },
   ]);
 });
@@ -67,8 +63,6 @@ test('getEmployeeWorkloadData keeps employees without tasks or entries', async (
       activeTaskCount: '0',
       estimatedHoursOnActiveTasks: '0',
       recordedHours: '0',
-      completedTaskCount: '0',
-      overdueTaskCount: '0',
     },
   ]);
 
@@ -92,8 +86,6 @@ test('getEmployeeWorkloadData runs one left-joined aggregate query for every mem
       activeTaskCount: '5',
       estimatedHoursOnActiveTasks: '42',
       recordedHours: '30',
-      completedTaskCount: '1',
-      overdueTaskCount: '1',
     },
     {
       employeeId: 'priya-id',
@@ -102,8 +94,6 @@ test('getEmployeeWorkloadData runs one left-joined aggregate query for every mem
       activeTaskCount: '3',
       estimatedHoursOnActiveTasks: '28',
       recordedHours: '22',
-      completedTaskCount: '2',
-      overdueTaskCount: '0',
     },
     {
       employeeId: 'sam-id',
@@ -112,8 +102,6 @@ test('getEmployeeWorkloadData runs one left-joined aggregate query for every mem
       activeTaskCount: '1',
       estimatedHoursOnActiveTasks: '8',
       recordedHours: '6',
-      completedTaskCount: '0',
-      overdueTaskCount: '0',
     },
   ]);
 
@@ -131,7 +119,31 @@ test('getEmployeeWorkloadData runs one left-joined aggregate query for every mem
   assert.match(sql, /LEFT JOIN task_metrics/);
   assert.match(sql, /LEFT JOIN timesheet_metrics/);
   assert.match(sql, /task\.status <> \$4/);
-  assert.match(sql, /task\.due_date < CURRENT_DATE AND task\.status <> \$4/);
   assert.match(sql, /entry\.work_date BETWEEN \$2 AND \$3/);
   assert.deepEqual(parameters, ['team-id', '2026-08-01', '2026-08-07', TaskStatus.DONE]);
+});
+
+test('getTeamTaskData scopes every task through its owning goal and includes unassigned tasks', async () => {
+  const setup = createRepository([
+    {
+      taskId: 'unassigned-task-id',
+      status: TaskStatus.TODO,
+      dueDate: '2026-08-10',
+    },
+  ]);
+
+  const rows = await setup.repository.getTeamTaskData('team-id');
+
+  assert.deepEqual(rows, [
+    {
+      taskId: 'unassigned-task-id',
+      status: TaskStatus.TODO,
+      dueDate: '2026-08-10',
+    },
+  ]);
+  assert.equal(setup.queryCalls.length, 1);
+  assert.match(setup.queryCalls[0].sql, /INNER JOIN goals goal ON goal\.id = task\.goal_id/);
+  assert.match(setup.queryCalls[0].sql, /WHERE goal\.team_id = \$1/);
+  assert.doesNotMatch(setup.queryCalls[0].sql, /assignee_id/);
+  assert.deepEqual(setup.queryCalls[0].parameters, ['team-id']);
 });
