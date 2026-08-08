@@ -6,6 +6,7 @@ import { env } from './common/config';
 import { AppDataSource } from './data-source';
 import { createAuthRouter } from './modules/auth/auth.controller';
 import { AuthService } from './modules/auth/auth.service';
+import { createUsersRouter } from './modules/users/users.controller';
 import { UserRepository } from './modules/users/users.repository';
 import { UsersService } from './modules/users/users.service';
 
@@ -22,7 +23,10 @@ export function createApp(): Express {
 
   const usersService = new UsersService(new UserRepository(AppDataSource));
   const authService = new AuthService(usersService, env.JWT_SECRET);
-  app.use('/auth', createAuthRouter(authService, requireAuth(env.JWT_SECRET)));
+  const authenticationMiddleware = requireAuth(env.JWT_SECRET);
+
+  app.use('/auth', createAuthRouter(authService, authenticationMiddleware));
+  app.use('/users', createUsersRouter(usersService, authenticationMiddleware));
 
   app.use(notFoundHandler);
   app.use(errorHandler);

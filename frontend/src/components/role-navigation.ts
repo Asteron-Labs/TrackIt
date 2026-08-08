@@ -1,9 +1,25 @@
 import type { UserRole } from '../types/auth';
 
-export const menuItemsByRole: Record<UserRole, string[]> = {
-  SUPER_ADMIN: ['Users', 'Teams', 'Goals and Tasks', 'Timesheets', 'Company Dashboard'],
-  TEAM_LEAD: ['My Team', 'Goals and Tasks', 'Team Timesheets', 'Team Dashboard'],
-  EMPLOYEE: ['My Tasks', 'My Timesheets'],
+export interface MenuItem {
+  label: string;
+  path?: string;
+}
+
+export const menuItemsByRole: Record<UserRole, MenuItem[]> = {
+  SUPER_ADMIN: [
+    { label: 'Users', path: '/users' },
+    { label: 'Teams' },
+    { label: 'Goals and Tasks' },
+    { label: 'Timesheets' },
+    { label: 'Company Dashboard' },
+  ],
+  TEAM_LEAD: [
+    { label: 'My Team' },
+    { label: 'Goals and Tasks' },
+    { label: 'Team Timesheets' },
+    { label: 'Team Dashboard' },
+  ],
+  EMPLOYEE: [{ label: 'My Tasks' }, { label: 'My Timesheets' }],
 };
 
 export const roleLabels: Record<UserRole, string> = {
