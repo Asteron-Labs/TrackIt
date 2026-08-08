@@ -1,0 +1,45 @@
+# Starts the TrackIt API and its PostgreSQL database with one command:
+#   docker compose up
+#
+# The top-level `version:` key is intentionally omitted — it is obsolete under the
+# current Compose Spec and only produces a warning.
+#
+# `env_file` points at backend/.env, which is gitignored. Copy the example first:
+#   cp backend/.env.example backend/.env
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    env_file: ./backend/.env
+    ports:
+      - '5432:5432'
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}']
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  api:
+    build: ./backend
+    restart: unless-stopped
+    env_file: ./backend/.env
+    # Inside the compose network the database is reachable at the service name,
+    # overriding the localhost default used when running the API on the host.
+    environment:
+      POSTGRES_HOST: postgres
+    depends_on:
+      postgres:
+        condition: service_healthy
+    ports:
+      - '3000:3000'
+    # Source-mounted for hot reload; the anonymous volume keeps the image's
+    # node_modules from being shadowed by the host mount.
+    volumes:
+      - ./backend:/app
+      - /app/node_modules
+
+volumes:
+  pgdata:
