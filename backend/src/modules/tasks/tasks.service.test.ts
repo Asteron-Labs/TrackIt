@@ -20,6 +20,7 @@ const TASK_ID = 'ce379e12-9464-4f42-9f04-19e04be1b4d1';
 const GOAL_ID = '756aefc5-fc71-4570-b730-f6677a18ac83';
 const TEAM_ID = '6bf8cd4f-02af-4211-8e0e-619f888f7381';
 const EMPLOYEE_ID = '2894b41a-d903-421b-8cbb-4dbd48c836ab';
+const OTHER_EMPLOYEE_ID = '4e624b36-454c-4c6d-8a69-551c8238f7c2';
 const CREATED_AT = new Date('2026-08-08T08:00:00.000Z');
 
 function storedTask(overrides: Partial<Task> = {}): Task {
@@ -321,6 +322,169 @@ test('updateTask persists only editable fields for an authorized Team Lead', asy
   assert.equal(task.title, 'Updated task');
   assert.equal(task.dueDatePastGoalDeadline, true);
 });
+
+test('assignTask reassigns a task to a member of the owning team', async () => {
+  let checkedLeadTeamId: string | undefined;
+  let checkedMember: { userId: string; teamId: string } | undefined;
+  let updatedAssigneeId: string | null | undefined;
+  const service = createService(
+    {
+      findById: async () => storedTask({ assigneeId: EMPLOYEE_ID }),
+      updateAssignee: async (_taskId, assigneeId) => {
+        updatedAssigneeId = assigneeId;
+        return storedTask({ assigneeId });
+      },
+    },
+    undefined,
+    {
+      getTeamDetails: async () => ({
+        id: TEAM_ID,
+        name: 'Platform',
+        description: '',
+        leadId: null,
+        weeklyCapacityHours: 40,
+        createdAt: CREATED_AT,
+        updatedAt: CREATED_AT,
+        lead: null,
+        members: [
+          {
+            id: OTHER_EMPLOYEE_ID,
+            name: 'Nimal Perera',
+            email: 'nimal@example.com',
+            role: UserRole.EMPLOYEE,
+            teamId: TEAM_ID,
+            joinedAt: CREATED_AT,
+          },
+        ],
+        memberCount: 1,
+      }),
+    },
+    {
+      assertTeamLeadOf: async (_userId, teamId) => {
+        checkedLeadTeamId = teamId;
+      },
+      assertMemberOf: async (userId, teamId) => {
+        checkedMember = { userId, teamId };
+      },
+    },
+  );
+
+  const task = await service.assignTask(
+    TASK_ID,
+    OTHER_EMPLOYEE_ID,
+    caller(UserRole.TEAM_LEAD),
+  );
+
+  assert.equal(checkedLeadTeamId, TEAM_ID);
+  assert.deepEqual(checkedMember, { userId: OTHER_EMPLOYEE_ID, teamId: TEAM_ID });
+  assert.equal(updatedAssigneeId, OTHER_EMPLOYEE_ID);
+  assert.deepEqual(task.assignee, { id: OTHER_EMPLOYEE_ID, name: 'Nimal Perera' });
+});
+
+test('assignTask returns 404 when the task does not exist', async () => {
+  const service = createService({ findById: async () => null });
+
+  await assert.rejects(
+    () => service.assignTask(TASK_ID, EMPLOYEE_ID, caller(UserRole.TEAM_LEAD)),
+    (error: unknown) => error instanceof NotFoundError,
+  );
+});
+
+test('assignTask rejects an assignee outside the owning team without persisting', async () => {
+  let updateWasCalled = false;
+  const service = createService(
+    {
+      findById: async () => storedTask(),
+      updateAssignee: async () => {
+        updateWasCalled = true;
+        return storedTask();
+      },
+    },
+    undefined,
+    undefined,
+    {
+      assertTeamLeadOf: async () => undefined,
+      assertMemberOf: async () => {
+        throw new ForbiddenError('Assignee is not a member of this team');
+      },
+    },
+  );
+
+  await assert.rejects(
+    () => service.assignTask(TASK_ID, OTHER_EMPLOYEE_ID, caller(UserRole.TEAM_LEAD)),
+    (error: unknown) => error instanceof ForbiddenError,
+  );
+  assert.equal(updateWasCalled, false);
+});
+
+test('assignTask rejects a task owned by another team without persisting', async () => {
+  let updateWasCalled = false;
+  const service = createService(
+    {
+      findById: async () => storedTask(),
+      updateAssignee: async () => {
+        updateWasCalled = true;
+        return storedTask();
+      },
+    },
+    {
+      getGoal: async () => {
+        throw new ForbiddenError('You do not have access to this goal');
+      },
+    },
+  );
+
+  await assert.rejects(
+    () => service.assignTask(TASK_ID, EMPLOYEE_ID, caller(UserRole.TEAM_LEAD)),
+    (error: unknown) => error instanceof ForbiddenError,
+  );
+  assert.equal(updateWasCalled, false);
+});
+
+test('assignTask returns a task to unassigned without checking membership', async () => {
+  let updatedAssigneeId: string | null | undefined;
+  const service = createService(
+    {
+      findById: async () => storedTask({ assigneeId: EMPLOYEE_ID }),
+      updateAssignee: async (_taskId, assigneeId) => {
+        updatedAssigneeId = assigneeId;
+        return storedTask({ assigneeId });
+      },
+    },
+    undefined,
+    undefined,
+    {
+      assertTeamLeadOf: async () => undefined,
+      assertMemberOf: async () => {
+        throw new Error('Unassignment should not check membership');
+      },
+    },
+  );
+
+  const task = await service.assignTask(TASK_ID, null, caller(UserRole.TEAM_LEAD));
+
+  assert.equal(updatedAssigneeId, null);
+  assert.equal(task.assigneeId, null);
+  assert.equal(task.assignee, null);
+});
+
+for (const role of [UserRole.EMPLOYEE, UserRole.SUPER_ADMIN]) {
+  test(`assignTask rejects ${role} callers`, async () => {
+    let lookupWasCalled = false;
+    const service = createService({
+      findById: async () => {
+        lookupWasCalled = true;
+        return storedTask();
+      },
+    });
+
+    await assert.rejects(
+      () => service.assignTask(TASK_ID, EMPLOYEE_ID, caller(role)),
+      (error: unknown) => error instanceof ForbiddenError,
+    );
+    assert.equal(lookupWasCalled, false);
+  });
+}
 
 test('overdue follows the shared task definition', () => {
   assert.equal(isTaskOverdue('2026-08-07', TaskStatus.TODO, '2026-08-08'), true);

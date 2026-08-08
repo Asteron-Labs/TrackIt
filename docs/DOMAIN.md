@@ -252,9 +252,7 @@ in React. This is a data-access rule, not a display rule.
 
 ---
 
-## Open questions
+## Resolved decisions
 
-One remains unsettled. See the Architecture Decision Records.
-
-1. **Can a task have more than one assignee?** Currently modelled as a single `assigneeId`.
-   Changing this later means rewriting every allocation query.
+1. **A task has at most one assignee.** Assignment uses the nullable `Task.assigneeId` column.
+   This keeps employee task ownership and per-person allocation unambiguous.

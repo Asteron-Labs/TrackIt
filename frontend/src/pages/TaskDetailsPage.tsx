@@ -1,26 +1,49 @@
 import { useEffect, useState } from "react";
 import { Link, useParams } from "react-router-dom";
 import { apiRequest } from "../api/client";
+import { useAuth } from "../auth/AuthContext";
+import { AssigneeSelect } from "../components/AssigneeSelect";
 import { Navigation } from "../components/Navigation";
 import { TaskStatusBadges } from "../components/TaskStatusBadges";
+import type { GoalResponse } from "../types/goal";
 import type { Task, TaskResponse } from "../types/task";
+import type { TeamDetailsResponse, TeamMember } from "../types/team";
 
 export function TaskDetailsPage() {
   const { id } = useParams();
+  const { user } = useAuth();
   const [task, setTask] = useState<Task | null>(null);
+  const [teamMembers, setTeamMembers] = useState<TeamMember[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  const [isSavingAssignee, setIsSavingAssignee] = useState(false);
   const [error, setError] = useState("");
+  const [assignmentError, setAssignmentError] = useState("");
 
   useEffect(() => {
     let requestWasCancelled = false;
 
-    setIsLoading(true);
-    setError("");
-    apiRequest<TaskResponse>(`/tasks/${id}`)
-      .then((response) => {
-        if (!requestWasCancelled) setTask(response.task);
-      })
-      .catch((requestError) => {
+    async function loadTaskDetails(): Promise<void> {
+      setIsLoading(true);
+      setError("");
+
+      try {
+        const taskResponse = await apiRequest<TaskResponse>(`/tasks/${id}`);
+        let members: TeamMember[] = [];
+        if (user?.role === "TEAM_LEAD") {
+          const goalResponse = await apiRequest<GoalResponse>(
+            `/goals/${taskResponse.task.goalId}`,
+          );
+          const teamResponse = await apiRequest<TeamDetailsResponse>(
+            `/teams/${goalResponse.goal.teamId}`,
+          );
+          members = teamResponse.team.members;
+        }
+
+        if (!requestWasCancelled) {
+          setTask(taskResponse.task);
+          setTeamMembers(members);
+        }
+      } catch (requestError) {
         if (!requestWasCancelled) {
           setError(
             requestError instanceof Error
@@ -28,15 +51,44 @@ export function TaskDetailsPage() {
               : "Unable to load task details",
           );
         }
-      })
-      .finally(() => {
+      } finally {
         if (!requestWasCancelled) setIsLoading(false);
-      });
+      }
+    }
+
+    void loadTaskDetails();
 
     return () => {
       requestWasCancelled = true;
     };
-  }, [id]);
+  }, [id, user?.role]);
+
+  async function updateAssignee(assigneeId: string | null): Promise<void> {
+    if (!task) return;
+
+    setIsSavingAssignee(true);
+    setAssignmentError("");
+    try {
+      const response = await apiRequest<TaskResponse>(
+        `/tasks/${task.id}/assignee`,
+        {
+          method: "PUT",
+          body: JSON.stringify({ assigneeId }),
+        },
+      );
+      setTask(response.task);
+    } catch (requestError) {
+      setAssignmentError(
+        requestError instanceof Error
+          ? requestError.message
+          : "Unable to update assignee",
+      );
+    } finally {
+      setIsSavingAssignee(false);
+    }
+  }
+
+  const canAssignTask = user?.role === "TEAM_LEAD";
 
   return (
     <div className="app-shell">
@@ -89,6 +141,35 @@ export function TaskDetailsPage() {
                 <strong>
                   {task.assignee ? task.assignee.name : "Unassigned"}
                 </strong>
+                {canAssignTask && (
+                  <div className="task-detail-assignment-controls">
+                    <AssigneeSelect
+                      id="task-detail-assignee"
+                      value={task.assigneeId}
+                      members={teamMembers}
+                      ariaLabel={`Assign ${task.title}`}
+                      disabled={isSavingAssignee}
+                      onChange={(assigneeId) =>
+                        void updateAssignee(assigneeId)
+                      }
+                    />
+                    {task.assigneeId && (
+                      <button
+                        className="secondary-button unassign-button"
+                        type="button"
+                        disabled={isSavingAssignee}
+                        onClick={() => void updateAssignee(null)}
+                      >
+                        Unassign task
+                      </button>
+                    )}
+                  </div>
+                )}
+                {assignmentError && (
+                  <span className="assignment-error" role="alert">
+                    {assignmentError}
+                  </span>
+                )}
               </div>
               <div className="panel task-metadata-card">
                 <span>Due date</span>
