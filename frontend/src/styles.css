@@ -163,6 +163,21 @@ textarea {
   font-size: 14px;
 }
 
+.form-warning,
+.detail-warning {
+  margin: 6px 0 0;
+  padding: 10px 12px;
+  color: #76520f;
+  background: #fff8df;
+  border: 1px solid #eddaa1;
+  border-radius: 8px;
+  font-size: 14px;
+}
+
+.detail-warning {
+  margin: 0 0 24px;
+}
+
 .submit-button,
 .logout-button,
 .danger-button {
@@ -278,7 +293,8 @@ textarea {
 .teams-page,
 .team-details-page,
 .goals-page,
-.goal-details-page {
+.goal-details-page,
+.task-details-page {
   min-width: 0;
   padding: clamp(36px, 5vw, 72px);
 }
@@ -325,13 +341,15 @@ textarea {
 
 .user-form,
 .team-form,
-.goal-form {
+.goal-form,
+.task-form {
   gap: 9px;
 }
 
 .user-form-panel,
 .team-form-panel,
-.goal-form-panel {
+.goal-form-panel,
+.task-form-panel {
   position: sticky;
   top: 24px;
 }
@@ -366,7 +384,8 @@ textarea {
 .users-table,
 .teams-table,
 .members-table,
-.goals-table {
+.goals-table,
+.tasks-table {
   width: 100%;
   border-collapse: collapse;
   font-size: 14px;
@@ -379,7 +398,9 @@ textarea {
 .members-table th,
 .members-table td,
 .goals-table th,
-.goals-table td {
+.goals-table td,
+.tasks-table th,
+.tasks-table td {
   padding: 13px 12px;
   text-align: left;
   border-bottom: 1px solid #e3ebe6;
@@ -388,7 +409,8 @@ textarea {
 .users-table th,
 .teams-table th,
 .members-table th,
-.goals-table th {
+.goals-table th,
+.tasks-table th {
   color: #506159;
   font-size: 12px;
   letter-spacing: 0.06em;
@@ -398,12 +420,14 @@ textarea {
 .users-table tbody tr:last-child td,
 .teams-table tbody tr:last-child td,
 .members-table tbody tr:last-child td,
-.goals-table tbody tr:last-child td {
+.goals-table tbody tr:last-child td,
+.tasks-table tbody tr:last-child td {
   border-bottom: 0;
 }
 
 .team-link,
 .goal-link,
+.task-link,
 .back-link {
   color: #1f6848;
   font-weight: 750;
@@ -412,6 +436,7 @@ textarea {
 
 .team-link:hover,
 .goal-link:hover,
+.task-link:hover,
 .back-link:hover {
   text-decoration: underline;
 }
@@ -564,6 +589,132 @@ textarea {
   min-height: 220px;
 }
 
+.goal-tasks-layout {
+  display: grid;
+  grid-template-columns: minmax(280px, 360px) minmax(0, 1fr);
+  align-items: start;
+  gap: 24px;
+}
+
+.goal-tasks-layout.list-only {
+  grid-template-columns: 1fr;
+}
+
+.task-number-date-fields {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+}
+
+.task-number-date-fields label {
+  display: block;
+  margin-bottom: 10px;
+}
+
+.task-count {
+  padding: 6px 10px;
+  color: #225d42;
+  background: #e9f4ed;
+  border-radius: 999px;
+  font-size: 13px;
+  font-weight: 750;
+  white-space: nowrap;
+}
+
+.task-badges {
+  display: inline-flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+}
+
+.task-status-badge,
+.task-priority-badge,
+.unassigned-label {
+  display: inline-block;
+  padding: 5px 8px;
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 750;
+  white-space: nowrap;
+}
+
+.task-status-todo {
+  color: #44564d;
+  background: #e9eeeb;
+}
+
+.task-status-in_progress {
+  color: #18563b;
+  background: #e2f3e8;
+}
+
+.task-status-blocked {
+  color: #8b2020;
+  background: #fff0f0;
+}
+
+.task-status-done {
+  color: #225d42;
+  background: #cfe8d8;
+}
+
+.task-priority-low {
+  color: #53645b;
+  background: #edf1ee;
+}
+
+.task-priority-medium {
+  color: #76520f;
+  background: #fff2c9;
+}
+
+.task-priority-high {
+  color: #8b2020;
+  background: #fbdede;
+}
+
+.unassigned-label {
+  color: #5e6e66;
+  background: #edf1ee;
+}
+
+.table-warning {
+  display: block;
+  margin-top: 4px;
+  color: #8a6216;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.task-details-heading {
+  align-items: end;
+}
+
+.task-details-heading > .task-badges {
+  justify-content: flex-end;
+}
+
+.task-metadata {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(180px, 1fr));
+  gap: 16px;
+}
+
+.task-metadata-card {
+  display: grid;
+  gap: 8px;
+}
+
+.task-metadata-card span {
+  color: #64736b;
+  font-size: 13px;
+}
+
+.task-metadata-card strong {
+  font-size: 18px;
+}
+
 .team-details-grid {
   display: grid;
   grid-template-columns: minmax(240px, 320px) minmax(0, 1fr);
@@ -638,17 +789,20 @@ textarea {
   .users-layout,
   .teams-layout,
   .goals-layout,
+  .goal-tasks-layout,
   .team-details-grid {
     grid-template-columns: 1fr;
   }
 
   .user-form-panel,
   .team-form-panel,
-  .goal-form-panel {
+  .goal-form-panel,
+  .task-form-panel {
     position: static;
   }
 
-  .goal-metadata {
+  .goal-metadata,
+  .task-metadata {
     grid-template-columns: repeat(2, minmax(150px, 1fr));
   }
 }
@@ -678,7 +832,8 @@ textarea {
   .teams-page,
   .team-details-page,
   .goals-page,
-  .goal-details-page {
+  .goal-details-page,
+  .task-details-page {
     padding: 36px 20px;
   }
 
@@ -687,18 +842,22 @@ textarea {
     flex-direction: column;
   }
 
-  .goal-details-heading {
+  .goal-details-heading,
+  .task-details-heading {
     align-items: stretch;
     flex-direction: column;
   }
 
-  .goal-details-heading > .goal-status-summary {
+  .goal-details-heading > .goal-status-summary,
+  .task-details-heading > .task-badges {
     justify-content: flex-start;
   }
 
   .team-goal-selector,
   .goal-date-fields,
-  .goal-metadata {
+  .goal-metadata,
+  .task-number-date-fields,
+  .task-metadata {
     grid-template-columns: 1fr;
   }
 
