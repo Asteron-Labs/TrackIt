@@ -1,5 +1,6 @@
+import { ScopeService } from '../../common/authorization/scope.service';
 import { MAX_DAILY_HOURS } from '../../common/config';
-import { ForbiddenError, ValidationError } from '../../common/errors';
+import { ForbiddenError, NotFoundError, ValidationError } from '../../common/errors';
 import { AuthenticatedUser } from '../../common/middleware/authenticate';
 import { TaskService } from '../tasks/tasks.service';
 import { TimesheetEntry, TimesheetSubmissionStatus } from './timesheets.entity';
@@ -9,6 +10,11 @@ export interface LogTimeDto {
   taskId: string;
   workDate: string;
   hoursSpent: number;
+  workNote?: string;
+}
+
+export interface UpdateTimeEntryDto {
+  hoursSpent?: number;
   workNote?: string;
 }
 
@@ -29,10 +35,16 @@ export interface LogTimeResult {
   created: boolean;
 }
 
+export interface UpdateTimeEntryResult {
+  timesheetEntry: TimesheetEntryProjection;
+  dailyTotalHours: number;
+}
+
 export class TimesheetService {
   constructor(
     private readonly timesheetRepository: TimesheetRepository,
     private readonly taskService: TaskService,
+    private readonly scopeService: ScopeService,
   ) {}
 
   async logTime(dto: LogTimeDto, caller: AuthenticatedUser): Promise<LogTimeResult> {
@@ -41,17 +53,11 @@ export class TimesheetService {
       throw new ForbiddenError('You can only log time against your own assigned tasks');
     }
 
-    this.assertValidHours(dto.hoursSpent);
-
-    const currentDailyTotal = await this.timesheetRepository.sumHoursByEmployeeInRange(
+    const dailyTotalHours = await this.validateEntryHours(
       caller.userId,
       dto.workDate,
-      dto.workDate,
+      dto.hoursSpent,
     );
-    const dailyTotalHours = currentDailyTotal + dto.hoursSpent;
-    if (dailyTotalHours > MAX_DAILY_HOURS) {
-      throw new ValidationError(`Daily total cannot exceed ${MAX_DAILY_HOURS} hours`);
-    }
 
     const existingEntry = await this.timesheetRepository.findByEmployeeAndTaskAndDate(
       caller.userId,
@@ -92,13 +98,70 @@ export class TimesheetService {
     };
   }
 
-  private assertValidHours(hoursSpent: number): void {
+  async updateEntry(
+    entryId: string,
+    dto: UpdateTimeEntryDto,
+    caller: AuthenticatedUser,
+  ): Promise<UpdateTimeEntryResult> {
+    const existingEntry = await this.timesheetRepository.findById(entryId);
+    if (!existingEntry) {
+      throw new NotFoundError('Timesheet entry not found');
+    }
+
+    this.scopeService.assertOwnsResource(caller.userId, existingEntry.employeeId);
+
+    const hoursSpent = dto.hoursSpent ?? existingEntry.hoursSpent;
+    const dailyTotalHours = await this.validateEntryHours(
+      caller.userId,
+      existingEntry.workDate,
+      hoursSpent,
+      existingEntry.hoursSpent,
+    );
+    const updatedEntry = await this.timesheetRepository.update(entryId, {
+      hoursSpent,
+      workNote: dto.workNote ?? existingEntry.workNote,
+    });
+
+    return {
+      timesheetEntry: this.toProjection(updatedEntry),
+      dailyTotalHours,
+    };
+  }
+
+  async deleteEntry(entryId: string, caller: AuthenticatedUser): Promise<void> {
+    const existingEntry = await this.timesheetRepository.findById(entryId);
+    if (!existingEntry) {
+      throw new NotFoundError('Timesheet entry not found');
+    }
+
+    this.scopeService.assertOwnsResource(caller.userId, existingEntry.employeeId);
+    await this.timesheetRepository.delete(entryId);
+  }
+
+  private async validateEntryHours(
+    employeeId: string,
+    workDate: string,
+    hoursSpent: number,
+    replacedHours = 0,
+  ): Promise<number> {
     if (!Number.isFinite(hoursSpent) || hoursSpent <= 0) {
       throw new ValidationError('Hours spent must be greater than zero');
     }
     if (hoursSpent > MAX_DAILY_HOURS) {
       throw new ValidationError(`Hours spent cannot exceed ${MAX_DAILY_HOURS} hours`);
     }
+
+    const currentDailyTotal = await this.timesheetRepository.sumHoursByEmployeeInRange(
+      employeeId,
+      workDate,
+      workDate,
+    );
+    const dailyTotalHours = currentDailyTotal - replacedHours + hoursSpent;
+    if (dailyTotalHours > MAX_DAILY_HOURS) {
+      throw new ValidationError(`Daily total cannot exceed ${MAX_DAILY_HOURS} hours`);
+    }
+
+    return dailyTotalHours;
   }
 
   private appendWorkNote(existingNote: string, newNote?: string): string {

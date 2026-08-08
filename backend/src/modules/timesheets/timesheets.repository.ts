@@ -28,6 +28,14 @@ export class TimesheetRepository extends BaseRepository<TimesheetEntry> {
     return this.repo.findOneByOrFail({ id: entryId });
   }
 
+  findById(entryId: string): Promise<TimesheetEntry | null> {
+    return this.repo.findOne({ where: { id: entryId } });
+  }
+
+  async delete(entryId: string): Promise<void> {
+    await this.repo.delete(entryId);
+  }
+
   findByEmployeeAndDate(employeeId: string, workDate: string): Promise<TimesheetEntry[]> {
     return this.repo.find({
       where: { employeeId, workDate },

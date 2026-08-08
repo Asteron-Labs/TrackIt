@@ -49,6 +49,7 @@ export function createApp(): Express {
   const timesheetService = new TimesheetService(
     new TimesheetRepository(AppDataSource),
     taskService,
+    scopeService,
   );
   const authService = new AuthService(usersService, env.JWT_SECRET);
   const authenticationMiddleware = requireAuth(env.JWT_SECRET);

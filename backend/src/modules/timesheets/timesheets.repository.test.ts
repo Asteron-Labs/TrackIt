@@ -11,6 +11,9 @@ interface RecordedClause {
 function createRepository(total = '0') {
   const findCalls: unknown[] = [];
   const findOneCalls: unknown[] = [];
+  const updateCalls: unknown[] = [];
+  const findOneByOrFailCalls: unknown[] = [];
+  const deleteCalls: unknown[] = [];
   const whereClauses: RecordedClause[] = [];
   const queryBuilder = {
     select() {
@@ -38,6 +41,18 @@ function createRepository(total = '0') {
         findOneCalls.push(options);
         return Promise.resolve(null);
       },
+      update(id: string, changes: unknown) {
+        updateCalls.push({ id, changes });
+        return Promise.resolve({ affected: 1 });
+      },
+      findOneByOrFail(options: unknown) {
+        findOneByOrFailCalls.push(options);
+        return Promise.resolve({ id: 'entry-id', hoursSpent: 3, workNote: 'Updated' });
+      },
+      delete(id: string) {
+        deleteCalls.push(id);
+        return Promise.resolve({ affected: 1 });
+      },
       createQueryBuilder: () => queryBuilder,
     }),
   } as unknown as DataSource;
@@ -46,6 +61,9 @@ function createRepository(total = '0') {
     repository: new TimesheetRepository(dataSource),
     findCalls,
     findOneCalls,
+    updateCalls,
+    findOneByOrFailCalls,
+    deleteCalls,
     whereClauses,
   };
 }
@@ -55,6 +73,7 @@ test('find methods scope entries by employee, task, and date', async () => {
 
   await repository.findByEmployeeAndDate('employee-id', '2026-08-07');
   await repository.findByEmployeeAndTaskAndDate('employee-id', 'task-id', '2026-08-07');
+  await repository.findById('entry-id');
   await repository.findByTask('task-id');
 
   assert.deepEqual(findCalls, [
@@ -75,7 +94,34 @@ test('find methods scope entries by employee, task, and date', async () => {
         workDate: '2026-08-07',
       },
     },
+    { where: { id: 'entry-id' } },
   ]);
+});
+
+test('update persists editable fields and returns the saved entry', async () => {
+  const { repository, updateCalls, findOneByOrFailCalls } = createRepository();
+
+  const entry = await repository.update('entry-id', {
+    hoursSpent: 3,
+    workNote: 'Updated',
+  });
+
+  assert.equal(entry.id, 'entry-id');
+  assert.deepEqual(updateCalls, [
+    {
+      id: 'entry-id',
+      changes: { hoursSpent: 3, workNote: 'Updated' },
+    },
+  ]);
+  assert.deepEqual(findOneByOrFailCalls, [{ id: 'entry-id' }]);
+});
+
+test('delete removes the requested entry', async () => {
+  const { repository, deleteCalls } = createRepository();
+
+  await repository.delete('entry-id');
+
+  assert.deepEqual(deleteCalls, ['entry-id']);
 });
 
 test('sumHoursByTask filters by task and converts the decimal result', async () => {
