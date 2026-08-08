@@ -3,6 +3,7 @@ import { healthRouter } from './health/health.controller';
 import { errorHandler, notFoundHandler } from './common/middleware/error-handler';
 import { cors } from './common/middleware/cors';
 import { requireAuth } from './common/middleware/authenticate';
+import { ScopeService } from './common/authorization/scope.service';
 import { env } from './common/config';
 import { AppDataSource } from './data-source';
 import { createAuthRouter } from './modules/auth/auth.controller';
@@ -10,6 +11,9 @@ import { AuthService } from './modules/auth/auth.service';
 import { createTeamsRouter } from './modules/teams/teams.controller';
 import { TeamRepository } from './modules/teams/teams.repository';
 import { TeamsService } from './modules/teams/teams.service';
+import { createGoalsRouter } from './modules/goals/goals.controller';
+import { GoalRepository } from './modules/goals/goals.repository';
+import { GoalService } from './modules/goals/goals.service';
 import { createUsersRouter } from './modules/users/users.controller';
 import { UserRepository } from './modules/users/users.repository';
 import { UsersService } from './modules/users/users.service';
@@ -28,12 +32,15 @@ export function createApp(): Express {
 
   const usersService = new UsersService(new UserRepository(AppDataSource));
   const teamsService = new TeamsService(new TeamRepository(AppDataSource), usersService);
+  const scopeService = new ScopeService(teamsService);
+  const goalService = new GoalService(new GoalRepository(AppDataSource), scopeService);
   const authService = new AuthService(usersService, env.JWT_SECRET);
   const authenticationMiddleware = requireAuth(env.JWT_SECRET);
 
   app.use('/auth', createAuthRouter(authService, authenticationMiddleware));
   app.use('/users', createUsersRouter(usersService, authenticationMiddleware));
   app.use('/teams', createTeamsRouter(teamsService, authenticationMiddleware));
+  app.use(createGoalsRouter(goalService, authenticationMiddleware));
 
   app.use(notFoundHandler);
   app.use(errorHandler);

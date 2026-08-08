@@ -1,12 +1,12 @@
-import { useEffect, useState } from 'react';
-import { Link, useParams } from 'react-router-dom';
-import { apiRequest } from '../api/client';
-import { useAuth } from '../auth/AuthContext';
-import { Navigation } from '../components/Navigation';
-import { roleLabels } from '../components/role-navigation';
-import { TeamLeadSelector } from '../components/TeamLeadSelector';
-import { TeamMemberAssignmentForm } from '../components/TeamMemberAssignmentForm';
-import type { TeamDetails, TeamDetailsResponse } from '../types/team';
+import { useEffect, useState } from "react";
+import { Link, useParams } from "react-router-dom";
+import { apiRequest } from "../api/client";
+import { useAuth } from "../auth/AuthContext";
+import { Navigation } from "../components/Navigation";
+import { roleLabels } from "../components/role-navigation";
+import { TeamLeadSelector } from "../components/TeamLeadSelector";
+import { TeamMemberAssignmentForm } from "../components/TeamMemberAssignmentForm";
+import type { TeamDetails, TeamDetailsResponse } from "../types/team";
 
 export function TeamDetailsPage() {
   const { id } = useParams();
@@ -14,15 +14,15 @@ export function TeamDetailsPage() {
   const [team, setTeam] = useState<TeamDetails | null>(null);
   const [refreshVersion, setRefreshVersion] = useState(0);
   const [isLoading, setIsLoading] = useState(true);
-  const [removingUserId, setRemovingUserId] = useState('');
-  const [error, setError] = useState('');
-  const [membershipError, setMembershipError] = useState('');
+  const [removingUserId, setRemovingUserId] = useState("");
+  const [error, setError] = useState("");
+  const [membershipError, setMembershipError] = useState("");
 
   useEffect(() => {
     let requestWasCancelled = false;
 
     setIsLoading(true);
-    setError('');
+    setError("");
     apiRequest<TeamDetailsResponse>(`/teams/${id}`)
       .then((response) => {
         if (!requestWasCancelled) setTeam(response.team);
@@ -30,7 +30,9 @@ export function TeamDetailsPage() {
       .catch((requestError) => {
         if (!requestWasCancelled) {
           setError(
-            requestError instanceof Error ? requestError.message : 'Unable to load team details',
+            requestError instanceof Error
+              ? requestError.message
+              : "Unable to load team details",
           );
         }
       })
@@ -44,28 +46,30 @@ export function TeamDetailsPage() {
   }, [id, refreshVersion]);
 
   function refreshTeam(): void {
-    setMembershipError('');
+    setMembershipError("");
     setRefreshVersion((version) => version + 1);
   }
 
   async function removeMember(userId: string): Promise<void> {
-    setMembershipError('');
+    setMembershipError("");
     setRemovingUserId(userId);
     try {
       await apiRequest<void>(`/teams/${id}/members/${userId}`, {
-        method: 'DELETE',
+        method: "DELETE",
       });
       refreshTeam();
     } catch (requestError) {
       setMembershipError(
-        requestError instanceof Error ? requestError.message : 'Unable to remove the team member',
+        requestError instanceof Error
+          ? requestError.message
+          : "Unable to remove the team member",
       );
     } finally {
-      setRemovingUserId('');
+      setRemovingUserId("");
     }
   }
 
-  const isSuperAdmin = user?.role === 'SUPER_ADMIN';
+  const isSuperAdmin = user?.role === "SUPER_ADMIN";
 
   return (
     <div className="app-shell">
@@ -88,11 +92,19 @@ export function TeamDetailsPage() {
               <div>
                 <p className="eyebrow">Team details</p>
                 <h1>{team.name}</h1>
-                <p>{team.description || 'No description provided.'}</p>
+                <p>{team.description || "No description provided."}</p>
               </div>
-              <div className="capacity-summary">
-                <strong>{team.weeklyCapacityHours}</strong>
-                <span>hours weekly capacity</span>
+              <div className="team-heading-actions">
+                <div className="capacity-summary">
+                  <strong>{team.weeklyCapacityHours}</strong>
+                  <span>hours weekly capacity</span>
+                </div>
+                <Link
+                  className="secondary-link"
+                  to={`/goals?teamId=${team.id}`}
+                >
+                  View team goals
+                </Link>
               </div>
             </header>
 
@@ -126,14 +138,18 @@ export function TeamDetailsPage() {
                 </section>
               )}
 
-              <section className="panel members-panel" aria-labelledby="members-title">
+              <section
+                className="panel members-panel"
+                aria-labelledby="members-title"
+              >
                 <div className="list-heading">
                   <div>
                     <p className="eyebrow">Membership</p>
                     <h2 id="members-title">Members</h2>
                   </div>
                   <span className="member-count">
-                    {team.memberCount} {team.memberCount === 1 ? 'member' : 'members'}
+                    {team.memberCount}{" "}
+                    {team.memberCount === 1 ? "member" : "members"}
                   </span>
                 </div>
 
@@ -162,7 +178,9 @@ export function TeamDetailsPage() {
                             <td>{member.name}</td>
                             <td>{member.email}</td>
                             <td>
-                              <span className="role-badge">{roleLabels[member.role]}</span>
+                              <span className="role-badge">
+                                {roleLabels[member.role]}
+                              </span>
                             </td>
                             {isSuperAdmin && (
                               <td>
@@ -172,7 +190,9 @@ export function TeamDetailsPage() {
                                   disabled={Boolean(removingUserId)}
                                   onClick={() => removeMember(member.id)}
                                 >
-                                  {removingUserId === member.id ? 'Removing…' : 'Remove'}
+                                  {removingUserId === member.id
+                                    ? "Removing…"
+                                    : "Remove"}
                                 </button>
                               </td>
                             )}
