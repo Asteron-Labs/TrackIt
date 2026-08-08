@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { DataSource } from 'typeorm';
-import { TaskStatus } from './tasks.entity';
+import { Task, TaskStatus } from './tasks.entity';
 import { TaskRepository } from './tasks.repository';
 
 interface RecordedClause {
@@ -15,6 +15,8 @@ function createRepository(rawRows: Array<{ status: TaskStatus; count: string }> 
   const orderClauses: Array<[string, string]> = [];
   const selectedColumns: Array<[string, string]> = [];
   const groupClauses: string[] = [];
+  const updates: Array<{ taskId: string; changes: Partial<Task> }> = [];
+  const storedTask = { id: 'task-id', assigneeId: null } as Task;
   const queryBuilder = {
     innerJoin(table: string, alias: string, condition: string) {
       joins.push([table, alias, condition]);
@@ -59,7 +61,16 @@ function createRepository(rawRows: Array<{ status: TaskStatus; count: string }> 
     },
   };
   const dataSource = {
-    getRepository: () => ({ createQueryBuilder: () => queryBuilder }),
+    getRepository: () => ({
+      createQueryBuilder: () => queryBuilder,
+      async update(taskId: string, changes: Partial<Task>) {
+        updates.push({ taskId, changes });
+        Object.assign(storedTask, changes);
+      },
+      async findOneByOrFail() {
+        return storedTask;
+      },
+    }),
   } as unknown as DataSource;
 
   return {
@@ -69,6 +80,7 @@ function createRepository(rawRows: Array<{ status: TaskStatus; count: string }> 
     orderClauses,
     selectedColumns,
     groupClauses,
+    updates,
   };
 }
 
@@ -135,6 +147,23 @@ test('findByTeam joins through goals and filters in SQL', async () => {
   assert.deepEqual(whereClauses, [
     { clause: 'goal.team_id = :teamId', parameters: { teamId: 'team-id' } },
   ]);
+});
+
+test('updateAssignee assigns, reassigns, and clears the assignee', async () => {
+  const { repository, updates } = createRepository();
+
+  const assignedTask = await repository.updateAssignee('task-id', 'first-member-id');
+  const reassignedTask = await repository.updateAssignee('task-id', 'second-member-id');
+  const unassignedTask = await repository.updateAssignee('task-id', null);
+
+  assert.deepEqual(updates, [
+    { taskId: 'task-id', changes: { assigneeId: 'first-member-id' } },
+    { taskId: 'task-id', changes: { assigneeId: 'second-member-id' } },
+    { taskId: 'task-id', changes: { assigneeId: null } },
+  ]);
+  assert.equal(assignedTask.id, 'task-id');
+  assert.equal(reassignedTask.id, 'task-id');
+  assert.equal(unassignedTask.assigneeId, null);
 });
 
 test('countByGoalAndStatus returns all statuses from one grouped query', async () => {

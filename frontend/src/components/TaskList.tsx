@@ -1,12 +1,59 @@
+import { useState } from "react";
 import { Link } from "react-router-dom";
-import type { Task } from "../types/task";
+import { apiRequest } from "../api/client";
+import type { Task, TaskResponse } from "../types/task";
+import type { TeamMember } from "../types/team";
+import { AssigneeSelect } from "./AssigneeSelect";
 import { TaskStatusBadges } from "./TaskStatusBadges";
 
 interface TaskListProps {
   tasks: Task[];
+  members: TeamMember[];
+  canAssign: boolean;
+  onAssignmentChanged: (task: Task) => void;
 }
 
-export function TaskList({ tasks }: TaskListProps) {
+export function TaskList({
+  tasks,
+  members,
+  canAssign,
+  onAssignmentChanged,
+}: TaskListProps) {
+  const [savingTaskId, setSavingTaskId] = useState<string | null>(null);
+  const [assignmentErrors, setAssignmentErrors] = useState<
+    Record<string, string>
+  >({});
+
+  async function changeAssignee(
+    taskId: string,
+    assigneeId: string | null,
+  ): Promise<void> {
+    setSavingTaskId(taskId);
+    setAssignmentErrors((currentErrors) => ({
+      ...currentErrors,
+      [taskId]: "",
+    }));
+
+    try {
+      const response = await apiRequest<TaskResponse>(
+        `/tasks/${taskId}/assignee`,
+        {
+          method: "PUT",
+          body: JSON.stringify({ assigneeId }),
+        },
+      );
+      onAssignmentChanged(response.task);
+    } catch (error) {
+      setAssignmentErrors((currentErrors) => ({
+        ...currentErrors,
+        [taskId]:
+          error instanceof Error ? error.message : "Unable to update assignee",
+      }));
+    } finally {
+      setSavingTaskId(null);
+    }
+  }
+
   if (tasks.length === 0) {
     return <p className="empty-state">No tasks yet.</p>;
   }
@@ -39,11 +86,35 @@ export function TaskList({ tasks }: TaskListProps) {
                 />
               </td>
               <td>
-                {task.assignee ? (
-                  task.assignee.name
-                ) : (
-                  <span className="unassigned-label">Unassigned</span>
-                )}
+                <div className="task-assignment-cell">
+                  {task.assignee ? (
+                    <div className="assignee-identity">
+                      <span className="assignee-avatar" aria-hidden="true">
+                        {task.assignee.name.charAt(0).toUpperCase()}
+                      </span>
+                      <span>{task.assignee.name}</span>
+                    </div>
+                  ) : (
+                    <span className="unassigned-label">Unassigned</span>
+                  )}
+                  {canAssign && (
+                    <AssigneeSelect
+                      id={`task-${task.id}-assignee`}
+                      value={task.assigneeId}
+                      members={members}
+                      ariaLabel={`Assign ${task.title}`}
+                      disabled={savingTaskId !== null}
+                      onChange={(assigneeId) =>
+                        void changeAssignee(task.id, assigneeId)
+                      }
+                    />
+                  )}
+                  {assignmentErrors[task.id] && (
+                    <span className="assignment-error" role="alert">
+                      {assignmentErrors[task.id]}
+                    </span>
+                  )}
+                </div>
               </td>
               <td>
                 <span>{task.dueDate}</span>

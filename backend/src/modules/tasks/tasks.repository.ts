@@ -76,6 +76,11 @@ export class TaskRepository extends BaseRepository<Task> {
     return this.repo.findOneByOrFail({ id: taskId });
   }
 
+  async updateAssignee(taskId: string, assigneeId: string | null): Promise<Task> {
+    await this.repo.update(taskId, { assigneeId });
+    return this.repo.findOneByOrFail({ id: taskId });
+  }
+
   async countByGoalAndStatus(goalId: string): Promise<TaskStatusCounts> {
     const rows = await this.repo
       .createQueryBuilder('task')

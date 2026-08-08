@@ -17,6 +17,7 @@ const TASK_ID = 'ce379e12-9464-4f42-9f04-19e04be1b4d1';
 const MISSING_TASK_ID = '11111111-1111-4111-8111-111111111111';
 const GOAL_ID = '756aefc5-fc71-4570-b730-f6677a18ac83';
 const OTHER_GOAL_ID = '22222222-2222-4222-8222-222222222222';
+const EMPLOYEE_ID = '2894b41a-d903-421b-8cbb-4dbd48c836ab';
 
 function taskProjection(overrides: Partial<TaskProjection> = {}): TaskProjection {
   return {
@@ -62,6 +63,12 @@ const taskService = {
   },
   async updateTask(_taskId: string, dto: UpdateTaskDto): Promise<TaskProjection> {
     return taskProjection(dto);
+  },
+  async assignTask(_taskId: string, assigneeId: string | null): Promise<TaskProjection> {
+    return taskProjection({
+      assigneeId,
+      assignee: assigneeId ? { id: assigneeId, name: 'Asha Silva' } : null,
+    });
   },
 } as unknown as TaskService;
 
@@ -263,6 +270,85 @@ test('PATCH /tasks/:id rejects empty bodies, invalid estimates, and Employees', 
   assert.equal(invalidEstimateResponse.status, 400);
   assert.equal(protectedFieldResponse.status, 400);
   assert.equal(employeeResponse.status, 403);
+});
+
+test('PUT /tasks/:id/assignee assigns and unassigns for a Team Lead', async () => {
+  const assignedResponse = await fetch(`${baseUrl}/tasks/${TASK_ID}/assignee`, {
+    method: 'PUT',
+    headers: {
+      ...authorizationHeader(UserRole.TEAM_LEAD),
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({ assigneeId: EMPLOYEE_ID }),
+  });
+  const assignedBody = (await assignedResponse.json()) as { task: TaskProjection };
+  const unassignedResponse = await fetch(`${baseUrl}/tasks/${TASK_ID}/assignee`, {
+    method: 'PUT',
+    headers: {
+      ...authorizationHeader(UserRole.TEAM_LEAD),
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({ assigneeId: null }),
+  });
+  const unassignedBody = (await unassignedResponse.json()) as { task: TaskProjection };
+
+  assert.equal(assignedResponse.status, 200);
+  assert.deepEqual(assignedBody.task.assignee, { id: EMPLOYEE_ID, name: 'Asha Silva' });
+  assert.equal(unassignedResponse.status, 200);
+  assert.equal(unassignedBody.task.assignee, null);
+});
+
+test('PUT /tasks/:id/assignee rejects invalid bodies', async () => {
+  for (const body of [
+    {},
+    { assigneeId: 'not-a-uuid' },
+    { assigneeId: EMPLOYEE_ID, unexpected: true },
+  ]) {
+    const response = await fetch(`${baseUrl}/tasks/${TASK_ID}/assignee`, {
+      method: 'PUT',
+      headers: {
+        ...authorizationHeader(UserRole.TEAM_LEAD),
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(body),
+    });
+
+    assert.equal(response.status, 400);
+  }
+});
+
+for (const role of [UserRole.EMPLOYEE, UserRole.SUPER_ADMIN]) {
+  test(`PUT /tasks/:id/assignee rejects ${role}`, async () => {
+    const response = await fetch(`${baseUrl}/tasks/${TASK_ID}/assignee`, {
+      method: 'PUT',
+      headers: {
+        ...authorizationHeader(role),
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ assigneeId: EMPLOYEE_ID }),
+    });
+
+    assert.equal(response.status, 403);
+  });
+}
+
+test('PUT /tasks/:id/assignee validates the task UUID and requires authentication', async () => {
+  const invalidIdResponse = await fetch(`${baseUrl}/tasks/not-a-uuid/assignee`, {
+    method: 'PUT',
+    headers: {
+      ...authorizationHeader(UserRole.TEAM_LEAD),
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({ assigneeId: EMPLOYEE_ID }),
+  });
+  const unauthenticatedResponse = await fetch(`${baseUrl}/tasks/${TASK_ID}/assignee`, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ assigneeId: EMPLOYEE_ID }),
+  });
+
+  assert.equal(invalidIdResponse.status, 400);
+  assert.equal(unauthenticatedResponse.status, 401);
 });
 
 test('task routes validate UUIDs and require authentication', async () => {

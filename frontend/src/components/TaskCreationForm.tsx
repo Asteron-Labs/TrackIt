@@ -1,16 +1,22 @@
 import { FormEvent, useState } from "react";
 import { apiRequest } from "../api/client";
 import type { Task, TaskPriority, TaskResponse } from "../types/task";
+import type { TeamMember } from "../types/team";
+import { AssigneeSelect } from "./AssigneeSelect";
 
 interface TaskCreationFormProps {
   goalId: string;
   goalDeadline: string;
+  members: TeamMember[];
+  canAssign: boolean;
   onCreated: (task: Task) => void;
 }
 
 export function TaskCreationForm({
   goalId,
   goalDeadline,
+  members,
+  canAssign,
   onCreated,
 }: TaskCreationFormProps) {
   const [title, setTitle] = useState("");
@@ -18,6 +24,7 @@ export function TaskCreationForm({
   const [priority, setPriority] = useState<TaskPriority>("MEDIUM");
   const [estimatedHours, setEstimatedHours] = useState("");
   const [dueDate, setDueDate] = useState("");
+  const [assigneeId, setAssigneeId] = useState<string | null>(null);
   const [formError, setFormError] = useState("");
   const [successMessage, setSuccessMessage] = useState("");
   const [createdWithDeadlineWarning, setCreatedWithDeadlineWarning] =
@@ -54,9 +61,38 @@ export function TaskCreationForm({
       setPriority("MEDIUM");
       setEstimatedHours("");
       setDueDate("");
+      setAssigneeId(null);
+
+      let createdTask = response.task;
+      if (assigneeId) {
+        try {
+          const assignmentResponse = await apiRequest<TaskResponse>(
+            `/tasks/${response.task.id}/assignee`,
+            {
+              method: "PUT",
+              body: JSON.stringify({ assigneeId }),
+            },
+          );
+          createdTask = assignmentResponse.task;
+        } catch (error) {
+          onCreated(response.task);
+          setCreatedWithDeadlineWarning(
+            response.task.dueDatePastGoalDeadline,
+          );
+          setFormError(
+            `Task created unassigned. ${
+              error instanceof Error
+                ? error.message
+                : "Unable to assign the task"
+            }`,
+          );
+          return;
+        }
+      }
+
       setSuccessMessage("Task created successfully.");
-      setCreatedWithDeadlineWarning(response.task.dueDatePastGoalDeadline);
-      onCreated(response.task);
+      setCreatedWithDeadlineWarning(createdTask.dueDatePastGoalDeadline);
+      onCreated(createdTask);
     } catch (error) {
       setFormError(
         error instanceof Error ? error.message : "Unable to create the task",
@@ -108,6 +144,18 @@ export function TaskCreationForm({
           <option value="MEDIUM">Medium</option>
           <option value="HIGH">High</option>
         </select>
+
+        {canAssign && (
+          <>
+            <label htmlFor="task-assignee">Assignee</label>
+            <AssigneeSelect
+              id="task-assignee"
+              value={assigneeId}
+              members={members}
+              onChange={setAssigneeId}
+            />
+          </>
+        )}
 
         <div className="task-number-date-fields">
           <div>

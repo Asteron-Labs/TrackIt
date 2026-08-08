@@ -36,6 +36,12 @@ const updateTaskSchema = z
   .partial()
   .refine((body) => Object.keys(body).length > 0, 'At least one field is required');
 
+const assignTaskSchema = z
+  .object({
+    assigneeId: z.string().uuid().nullable(),
+  })
+  .strict();
+
 const goalIdSchema = z.object({
   goalId: z.string().uuid(),
 });
@@ -92,6 +98,24 @@ export function createTasksRouter(taskService: TaskService, requireAuth: Request
     async (req, res, next) => {
       try {
         const task = await taskService.updateTask(req.params.id, req.body, req.user!);
+        res.status(200).json({ task });
+      } catch (error) {
+        next(error);
+      }
+    },
+  );
+
+  tasksRouter.put(
+    '/tasks/:id/assignee',
+    requireRole(UserRole.TEAM_LEAD),
+    validate({ params: taskIdSchema, body: assignTaskSchema }),
+    async (req, res, next) => {
+      try {
+        const task = await taskService.assignTask(
+          req.params.id,
+          req.body.assigneeId,
+          req.user!,
+        );
         res.status(200).json({ task });
       } catch (error) {
         next(error);

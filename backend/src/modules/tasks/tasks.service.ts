@@ -137,6 +137,31 @@ export class TaskService {
     return this.toProjection(updatedTask, goal.deadline, assignees);
   }
 
+  async assignTask(
+    taskId: string,
+    assigneeId: string | null,
+    caller: AuthenticatedUser,
+  ): Promise<TaskProjection> {
+    if (caller.role !== UserRole.TEAM_LEAD) {
+      throw new ForbiddenError('Only Team Leads can assign tasks');
+    }
+
+    const existingTask = await this.taskRepository.findById(taskId);
+    if (!existingTask) {
+      throw new NotFoundError('Task not found');
+    }
+
+    const goal = await this.goalService.getGoal(existingTask.goalId, caller);
+    await this.scopeService.assertTeamLeadOf(caller.userId, goal.teamId);
+    if (assigneeId !== null) {
+      await this.scopeService.assertMemberOf(assigneeId, goal.teamId);
+    }
+
+    const updatedTask = await this.taskRepository.updateAssignee(taskId, assigneeId);
+    const assignees = await this.loadAssignees(goal, [updatedTask], caller);
+    return this.toProjection(updatedTask, goal.deadline, assignees);
+  }
+
   private async assertCanManageTeam(caller: AuthenticatedUser, teamId: string): Promise<void> {
     if (caller.role === UserRole.SUPER_ADMIN) return;
     if (caller.role !== UserRole.TEAM_LEAD) {
