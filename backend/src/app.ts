@@ -14,6 +14,9 @@ import { TeamsService } from './modules/teams/teams.service';
 import { createGoalsRouter } from './modules/goals/goals.controller';
 import { GoalRepository } from './modules/goals/goals.repository';
 import { GoalService } from './modules/goals/goals.service';
+import { createTasksRouter } from './modules/tasks/tasks.controller';
+import { TaskRepository } from './modules/tasks/tasks.repository';
+import { TaskService } from './modules/tasks/tasks.service';
 import { createUsersRouter } from './modules/users/users.controller';
 import { UserRepository } from './modules/users/users.repository';
 import { UsersService } from './modules/users/users.service';
@@ -34,6 +37,12 @@ export function createApp(): Express {
   const teamsService = new TeamsService(new TeamRepository(AppDataSource), usersService);
   const scopeService = new ScopeService(teamsService);
   const goalService = new GoalService(new GoalRepository(AppDataSource), scopeService);
+  const taskService = new TaskService(
+    new TaskRepository(AppDataSource),
+    goalService,
+    teamsService,
+    scopeService,
+  );
   const authService = new AuthService(usersService, env.JWT_SECRET);
   const authenticationMiddleware = requireAuth(env.JWT_SECRET);
 
@@ -41,6 +50,7 @@ export function createApp(): Express {
   app.use('/users', createUsersRouter(usersService, authenticationMiddleware));
   app.use('/teams', createTeamsRouter(teamsService, authenticationMiddleware));
   app.use(createGoalsRouter(goalService, authenticationMiddleware));
+  app.use(createTasksRouter(taskService, authenticationMiddleware));
 
   app.use(notFoundHandler);
   app.use(errorHandler);

@@ -5,6 +5,7 @@ import { GoalDetailsPage } from "./pages/GoalDetailsPage";
 import { LoginPage } from "./pages/LoginPage";
 import { TeamDetailsPage } from "./pages/TeamDetailsPage";
 import { TeamGoalsPage } from "./pages/TeamGoalsPage";
+import { TaskDetailsPage } from "./pages/TaskDetailsPage";
 import { TeamsPage } from "./pages/TeamsPage";
 import { UsersPage } from "./pages/UsersPage";
 
@@ -16,6 +17,7 @@ export function App() {
         <Route path="/" element={<HomePage />} />
         <Route path="/goals" element={<TeamGoalsPage />} />
         <Route path="/goals/:id" element={<GoalDetailsPage />} />
+        <Route path="/tasks/:id" element={<TaskDetailsPage />} />
         <Route element={<ProtectedRoute allowedRoles={["SUPER_ADMIN"]} />}>
           <Route path="/users" element={<UsersPage />} />
         </Route>

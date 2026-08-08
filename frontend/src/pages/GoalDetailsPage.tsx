@@ -1,9 +1,13 @@
 import { useEffect, useState } from "react";
 import { Link, useParams } from "react-router-dom";
 import { apiRequest } from "../api/client";
+import { useAuth } from "../auth/AuthContext";
 import { GoalStatusBadge } from "../components/GoalStatusBadge";
 import { Navigation } from "../components/Navigation";
+import { TaskCreationForm } from "../components/TaskCreationForm";
+import { TaskList } from "../components/TaskList";
 import type { Goal, GoalResponse } from "../types/goal";
+import type { Task, TasksResponse } from "../types/task";
 
 const importanceLabels = {
   LOW: "Low",
@@ -13,7 +17,9 @@ const importanceLabels = {
 
 export function GoalDetailsPage() {
   const { id } = useParams();
+  const { user } = useAuth();
   const [goal, setGoal] = useState<Goal | null>(null);
+  const [tasks, setTasks] = useState<Task[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState("");
 
@@ -22,9 +28,15 @@ export function GoalDetailsPage() {
 
     setIsLoading(true);
     setError("");
-    apiRequest<GoalResponse>(`/goals/${id}`)
-      .then((response) => {
-        if (!requestWasCancelled) setGoal(response.goal);
+    Promise.all([
+      apiRequest<GoalResponse>(`/goals/${id}`),
+      apiRequest<TasksResponse>(`/goals/${id}/tasks`),
+    ])
+      .then(([goalResponse, tasksResponse]) => {
+        if (!requestWasCancelled) {
+          setGoal(goalResponse.goal);
+          setTasks(tasksResponse.tasks);
+        }
       })
       .catch((requestError) => {
         if (!requestWasCancelled) {
@@ -43,6 +55,19 @@ export function GoalDetailsPage() {
       requestWasCancelled = true;
     };
   }, [id]);
+
+  function addCreatedTask(task: Task): void {
+    setTasks((currentTasks) =>
+      [...currentTasks, task].sort(
+        (first, second) =>
+          first.dueDate.localeCompare(second.dueDate) ||
+          first.title.localeCompare(second.title),
+      ),
+    );
+  }
+
+  const canCreateTasks =
+    user?.role === "SUPER_ADMIN" || user?.role === "TEAM_LEAD";
 
   return (
     <div className="app-shell">
@@ -102,14 +127,36 @@ export function GoalDetailsPage() {
               </div>
             </section>
 
-            <section
-              className="panel goal-tasks-shell"
-              aria-labelledby="goal-tasks-title"
+            <div
+              className={
+                canCreateTasks
+                  ? "goal-tasks-layout"
+                  : "goal-tasks-layout list-only"
+              }
             >
-              <p className="eyebrow">Tasks</p>
-              <h2 id="goal-tasks-title">Work under this goal</h2>
-              <p className="empty-state">No tasks yet.</p>
-            </section>
+              {canCreateTasks && (
+                <TaskCreationForm
+                  goalId={goal.id}
+                  goalDeadline={goal.deadline}
+                  onCreated={addCreatedTask}
+                />
+              )}
+              <section
+                className="panel goal-tasks-shell"
+                aria-labelledby="goal-tasks-title"
+              >
+                <div className="list-heading">
+                  <div>
+                    <p className="eyebrow">Tasks</p>
+                    <h2 id="goal-tasks-title">Work under this goal</h2>
+                  </div>
+                  <span className="task-count">
+                    {tasks.length} {tasks.length === 1 ? "task" : "tasks"}
+                  </span>
+                </div>
+                <TaskList tasks={tasks} />
+              </section>
+            </div>
           </>
         )}
       </main>
