@@ -5,6 +5,7 @@ import { GoalDetailsPage } from "./pages/GoalDetailsPage";
 import { LoginPage } from "./pages/LoginPage";
 import { MyTasksPage } from "./pages/MyTasksPage";
 import { TeamDetailsPage } from "./pages/TeamDetailsPage";
+import { TeamDashboardPage } from "./pages/TeamDashboardPage";
 import { TeamGoalsPage } from "./pages/TeamGoalsPage";
 import { TeamTimesheetsPage } from "./pages/TeamTimesheetsPage";
 import { TaskDetailsPage } from "./pages/TaskDetailsPage";
@@ -31,6 +32,7 @@ export function App() {
         >
           <Route path="/teams" element={<TeamsPage />} />
           <Route path="/teams/:id" element={<TeamDetailsPage />} />
+          <Route path="/teams/:id/dashboard" element={<TeamDashboardPage />} />
         </Route>
         <Route element={<ProtectedRoute allowedRoles={["TEAM_LEAD"]} />}>
           <Route

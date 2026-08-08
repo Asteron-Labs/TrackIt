@@ -26,7 +26,10 @@ import { TimesheetService } from './modules/timesheets/timesheets.service';
 import { createUsersRouter } from './modules/users/users.controller';
 import { UserRepository } from './modules/users/users.repository';
 import { UsersService } from './modules/users/users.service';
-import { createAllocationRouter } from './modules/dashboards/allocation.controller';
+import {
+  createAllocationRouter,
+  createCompanyAllocationRouter,
+} from './modules/dashboards/allocation.controller';
 import { AllocationRepository } from './modules/dashboards/allocation.repository';
 import { AllocationService } from './modules/dashboards/allocation.service';
 
@@ -78,6 +81,7 @@ export function createApp(): Express {
   app.use('/users', createUsersRouter(usersService, authenticationMiddleware));
   app.use('/teams', createTeamsRouter(teamsService, authenticationMiddleware));
   app.use('/teams', createAllocationRouter(allocationService, authenticationMiddleware));
+  app.use('/company', createCompanyAllocationRouter(allocationService, authenticationMiddleware));
   app.use(createGoalsRouter(goalService, authenticationMiddleware));
   app.use(createTasksRouter(taskService, authenticationMiddleware));
   app.use(

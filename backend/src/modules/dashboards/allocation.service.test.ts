@@ -9,6 +9,8 @@ import { TaskStatus } from '../tasks/tasks.entity';
 import { UserRole } from '../users/users.entity';
 import {
   AllocationRepository,
+  CompanyWorkloadFilter,
+  CompanyWorkloadData,
   EmployeeWorkloadData,
   TeamTaskData,
 } from './allocation.repository';
@@ -81,6 +83,7 @@ function createService(
 ): AllocationService {
   return new AllocationService(
     {
+      getCompanyWorkloadData: async () => [],
       getEmployeeWorkloadData: async () => [],
       getTeamTaskData: async () => [],
       ...allocationRepository,
@@ -306,4 +309,152 @@ test('getEmployeeWorkloads forwards the recorded-hours range without changing es
   assert.equal(second[0].recordedHours, 12);
   assert.equal(first[0].estimatedHoursOnActiveTasks, second[0].estimatedHoursOnActiveTasks);
   assert.equal(first[0].workload, second[0].workload);
+});
+
+function companyWorkloadData(): CompanyWorkloadData[] {
+  return [
+    {
+      teamId: TEAM_ID,
+      teamName: 'Platform',
+      activeGoalCount: 2,
+      employees: workloadData(),
+      tasks: [
+        { taskId: 'overdue-id', status: TaskStatus.IN_PROGRESS, dueDate: '2020-01-01' },
+        { taskId: 'done-id', status: TaskStatus.DONE, dueDate: '2020-01-01' },
+      ],
+    },
+    {
+      teamId: '11111111-1111-4111-8111-111111111111',
+      teamName: 'Operations',
+      activeGoalCount: 1,
+      employees: [
+        {
+          employeeId: 'lee-id',
+          employeeName: 'Lee',
+          weeklyCapacityHours: 40,
+          activeTaskCount: 1,
+          estimatedHoursOnActiveTasks: 10,
+          recordedHours: 4,
+        },
+      ],
+      tasks: [{ taskId: 'future-id', status: TaskStatus.TODO, dueDate: '2099-01-01' }],
+    },
+  ];
+}
+
+test('getCompanySummary returns team breakdowns and totals built from the same figures', async () => {
+  const service = createService({ getCompanyWorkloadData: async () => companyWorkloadData() });
+
+  const summary = await service.getCompanySummary(
+    { from: '2026-08-01', to: '2026-08-07' },
+    caller(UserRole.SUPER_ADMIN),
+  );
+
+  assert.deepEqual(summary.kpis, {
+    totalTeams: 2,
+    totalEmployees: 4,
+    activeGoals: 3,
+    totalTasks: 3,
+    overdueTasks: 1,
+  });
+  assert.deepEqual(summary.teams[0], {
+    teamId: TEAM_ID,
+    teamName: 'Platform',
+    memberCount: 3,
+    activeGoals: 2,
+    totalTasks: 2,
+    overdueTasks: 1,
+    averageUtilisation: (105 + 70 + 0) / 3,
+    overloadedMemberCount: 1,
+    availableMemberCount: 1,
+  });
+  assert.equal(summary.employees.length, 4);
+  assert.equal(summary.employees[0].teamName, 'Platform');
+  assert.equal(summary.employees[0].workload, 'OVERLOADED');
+  assert.equal(
+    summary.kpis.totalEmployees,
+    summary.teams.reduce((sum, team) => sum + team.memberCount, 0),
+  );
+  assert.equal(
+    summary.kpis.overdueTasks,
+    summary.teams.reduce((sum, team) => sum + team.overdueTasks, 0),
+  );
+});
+
+test('getCompanySummary forwards composed team, goal, and date filters', async () => {
+  let receivedFilter: CompanyWorkloadFilter | undefined;
+  const service = createService({
+    getCompanyWorkloadData: async (filter) => {
+      receivedFilter = filter;
+      return [];
+    },
+  });
+
+  const summary = await service.getCompanySummary(
+    {
+      from: '2026-08-01',
+      to: '2026-08-07',
+      teamId: TEAM_ID,
+      goalId: '756aefc5-fc71-4570-b730-f6677a18ac83',
+    },
+    caller(UserRole.SUPER_ADMIN),
+  );
+
+  assert.deepEqual(receivedFilter, {
+    from: '2026-08-01',
+    to: '2026-08-07',
+    teamId: TEAM_ID,
+    goalId: '756aefc5-fc71-4570-b730-f6677a18ac83',
+  });
+  assert.deepEqual(summary.filters, {
+    teamId: TEAM_ID,
+    goalId: '756aefc5-fc71-4570-b730-f6677a18ac83',
+  });
+});
+
+test('getCompanySummary defaults an omitted date range to the current UTC week', async () => {
+  let receivedFilter: CompanyWorkloadFilter | undefined;
+  const service = createService({
+    getCompanyWorkloadData: async (filter) => {
+      receivedFilter = filter;
+      return [];
+    },
+  });
+
+  const summary = await service.getCompanySummary({}, caller(UserRole.SUPER_ADMIN));
+  const from = new Date(`${summary.range.from}T00:00:00.000Z`);
+  const to = new Date(`${summary.range.to}T00:00:00.000Z`);
+
+  assert.equal(from.getUTCDay(), 1);
+  assert.equal(to.getUTCDay(), 0);
+  assert.equal((to.getTime() - from.getTime()) / 86_400_000, 6);
+  assert.deepEqual(receivedFilter, { ...summary.range, teamId: undefined, goalId: undefined });
+});
+
+test('getCompanySummary rejects non-admin callers and invalid ranges before querying', async () => {
+  let repositoryWasCalled = false;
+  const service = createService({
+    getCompanyWorkloadData: async () => {
+      repositoryWasCalled = true;
+      return [];
+    },
+  });
+
+  await assert.rejects(
+    () => service.getCompanySummary({}, caller(UserRole.TEAM_LEAD)),
+    ForbiddenError,
+  );
+  await assert.rejects(
+    () =>
+      service.getCompanySummary(
+        { from: '2026-08-01', to: '2026-07-31' },
+        caller(UserRole.SUPER_ADMIN),
+      ),
+    ValidationError,
+  );
+  await assert.rejects(
+    () => service.getCompanySummary({ from: '2026-08-01' }, caller(UserRole.SUPER_ADMIN)),
+    ValidationError,
+  );
+  assert.equal(repositoryWasCalled, false);
 });

@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { DataSource } from 'typeorm';
+import { GoalStatus } from '../goals/goals.entity';
 import { TaskStatus } from '../tasks/tasks.entity';
 import { AllocationRepository } from './allocation.repository';
 
@@ -9,7 +10,7 @@ interface QueryCall {
   parameters: unknown[];
 }
 
-function createRepository(rows: Array<Record<string, string>>) {
+function createRepository(rows: Array<Record<string, unknown>>) {
   const queryCalls: QueryCall[] = [];
   const dataSource = {
     async query(sql: string, parameters: unknown[]) {
@@ -27,12 +28,16 @@ function createRepository(rows: Array<Record<string, string>>) {
 test('getEmployeeWorkloadData maps workload aggregates to numbers', async () => {
   const setup = createRepository([
     {
+      teamId: 'team-id',
+      teamName: 'Platform',
+      activeGoalCount: '1',
       employeeId: 'alex-id',
       employeeName: 'Alex',
       weeklyCapacityHours: '40',
       activeTaskCount: '5',
       estimatedHoursOnActiveTasks: '42',
       recordedHours: '30.5',
+      tasks: [],
     },
   ]);
 
@@ -57,12 +62,16 @@ test('getEmployeeWorkloadData maps workload aggregates to numbers', async () => 
 test('getEmployeeWorkloadData keeps employees without tasks or entries', async () => {
   const setup = createRepository([
     {
+      teamId: 'team-id',
+      teamName: 'Platform',
+      activeGoalCount: '0',
       employeeId: 'sam-id',
       employeeName: 'Sam',
       weeklyCapacityHours: '40',
       activeTaskCount: '0',
       estimatedHoursOnActiveTasks: '0',
       recordedHours: '0',
+      tasks: [],
     },
   ]);
 
@@ -80,28 +89,40 @@ test('getEmployeeWorkloadData keeps employees without tasks or entries', async (
 test('getEmployeeWorkloadData runs one left-joined aggregate query for every member', async () => {
   const setup = createRepository([
     {
+      teamId: 'team-id',
+      teamName: 'Platform',
+      activeGoalCount: '1',
       employeeId: 'alex-id',
       employeeName: 'Alex',
       weeklyCapacityHours: '40',
       activeTaskCount: '5',
       estimatedHoursOnActiveTasks: '42',
       recordedHours: '30',
+      tasks: [],
     },
     {
+      teamId: 'team-id',
+      teamName: 'Platform',
+      activeGoalCount: '1',
       employeeId: 'priya-id',
       employeeName: 'Priya',
       weeklyCapacityHours: '40',
       activeTaskCount: '3',
       estimatedHoursOnActiveTasks: '28',
       recordedHours: '22',
+      tasks: [],
     },
     {
+      teamId: 'team-id',
+      teamName: 'Platform',
+      activeGoalCount: '1',
       employeeId: 'sam-id',
       employeeName: 'Sam',
       weeklyCapacityHours: '40',
       activeTaskCount: '1',
       estimatedHoursOnActiveTasks: '8',
       recordedHours: '6',
+      tasks: [],
     },
   ]);
 
@@ -115,12 +136,100 @@ test('getEmployeeWorkloadData runs one left-joined aggregate query for every mem
   assert.equal(setup.queryCalls.length, 1);
 
   const [{ sql, parameters }] = setup.queryCalls;
-  assert.match(sql, /FROM team_members membership/);
+  assert.match(sql, /FROM teams team/);
+  assert.match(sql, /LEFT JOIN team_members membership/);
   assert.match(sql, /LEFT JOIN task_metrics/);
   assert.match(sql, /LEFT JOIN timesheet_metrics/);
-  assert.match(sql, /task\.status <> \$4/);
-  assert.match(sql, /entry\.work_date BETWEEN \$2 AND \$3/);
-  assert.deepEqual(parameters, ['team-id', '2026-08-01', '2026-08-07', TaskStatus.DONE]);
+  assert.match(sql, /task\.status <> \$5/);
+  assert.match(sql, /entry\.work_date BETWEEN \$1 AND \$2/);
+  assert.deepEqual(parameters, [
+    '2026-08-01',
+    '2026-08-07',
+    'team-id',
+    null,
+    TaskStatus.DONE,
+    GoalStatus.ACTIVE,
+  ]);
+});
+
+test('getCompanyWorkloadData groups employees and task data under their teams', async () => {
+  const tasks = [
+    { taskId: 'task-id', status: TaskStatus.TODO, dueDate: '2026-08-10' },
+  ];
+  const setup = createRepository([
+    {
+      teamId: 'platform-id',
+      teamName: 'Platform',
+      activeGoalCount: '2',
+      employeeId: 'alex-id',
+      employeeName: 'Alex',
+      weeklyCapacityHours: '40',
+      activeTaskCount: '2',
+      estimatedHoursOnActiveTasks: '36',
+      recordedHours: '12.5',
+      tasks,
+    },
+    {
+      teamId: 'platform-id',
+      teamName: 'Platform',
+      activeGoalCount: '2',
+      employeeId: 'sam-id',
+      employeeName: 'Sam',
+      weeklyCapacityHours: '40',
+      activeTaskCount: '0',
+      estimatedHoursOnActiveTasks: '0',
+      recordedHours: '0',
+      tasks,
+    },
+    {
+      teamId: 'empty-id',
+      teamName: 'Empty',
+      activeGoalCount: '0',
+      employeeId: null,
+      employeeName: null,
+      weeklyCapacityHours: '40',
+      activeTaskCount: '0',
+      estimatedHoursOnActiveTasks: '0',
+      recordedHours: '0',
+      tasks: [],
+    },
+  ]);
+
+  const teams = await setup.repository.getCompanyWorkloadData({
+    from: '2026-08-01',
+    to: '2026-08-07',
+  });
+
+  assert.equal(setup.queryCalls.length, 1);
+  assert.equal(teams.length, 2);
+  assert.equal(teams[0].employees.length, 2);
+  assert.deepEqual(teams[0].tasks, tasks);
+  assert.equal(teams[1].employees.length, 0);
+});
+
+test('getCompanyWorkloadData composes team, goal, and date filters in one query', async () => {
+  const setup = createRepository([]);
+
+  await setup.repository.getCompanyWorkloadData({
+    from: '2026-08-01',
+    to: '2026-08-07',
+    teamId: 'team-id',
+    goalId: 'goal-id',
+  });
+
+  assert.equal(setup.queryCalls.length, 1);
+  const [{ sql, parameters }] = setup.queryCalls;
+  assert.match(sql, /\$3::uuid IS NULL OR goal\.team_id = \$3/);
+  assert.match(sql, /\$4::uuid IS NULL OR goal\.id = \$4/);
+  assert.match(sql, /entry\.work_date BETWEEN \$1 AND \$2/);
+  assert.deepEqual(parameters, [
+    '2026-08-01',
+    '2026-08-07',
+    'team-id',
+    'goal-id',
+    TaskStatus.DONE,
+    GoalStatus.ACTIVE,
+  ]);
 });
 
 test('getTeamTaskData scopes every task through its owning goal and includes unassigned tasks', async () => {

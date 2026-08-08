@@ -14,11 +14,15 @@ It does not persist workload, utilisation, progress, or risk values.
   when the range is longer than one week.
 - Employees without tasks or timesheet entries remain in allocation results with zero values.
 - Team workload is loaded in one query regardless of the number of team members.
+- Company workload is loaded in one query regardless of the number of teams or members.
+- Company team, goal, and date filters compose with `AND`; dates filter recorded hours only.
+- An omitted company date range means the current Monday-to-Sunday week.
 - Completed tasks are tasks in `DONE`. Overdue tasks have a due date before today and are not
   `DONE`.
 - The team dashboard counts persisted `BLOCKED` task status. Dependency-derived blocking remains
   separate and is introduced with task dependencies.
 - A Team Lead can read only the team they lead. A Super Admin may read any team summary.
+- Only a Super Admin may read the company summary.
 
 ## Public service methods
 
@@ -26,6 +30,9 @@ It does not persist workload, utilisation, progress, or risk values.
   effort totals, utilisation, and shared workload classification.
 - `AllocationService.getTeamSummary(teamId, { from, to }, caller)` returns the team KPIs, employee
   workloads, and progress for active goals after enforcing team scope.
+- `AllocationService.getCompanySummary({ from, to, teamId, goalId }, caller)` returns company KPIs,
+  per-team comparisons, and company-wide employee workloads for a Super Admin. Company totals are
+  sums of the same per-team figures returned in the response.
 - `classifyWorkload(estimatedHours, capacityHours)` is the pure workload calculation reused by
   dashboards and risk checks.
 
@@ -33,5 +40,7 @@ It does not persist workload, utilisation, progress, or risk values.
 
 - `AllocationRepository.getEmployeeWorkloadData(teamId, from, to)` returns per-employee task and
   effort aggregates in one query, with an inclusive date range for recorded hours.
+- `AllocationRepository.getCompanyWorkloadData(filter)` returns team-grouped workload, goal, and
+  task data with composable optional scope filters in one query.
 - `AllocationRepository.getTeamTaskData(teamId)` returns the team-scoped task status and due-date
   data used to calculate dashboard KPIs, including unassigned tasks.

@@ -1,13 +1,17 @@
 import { WORKLOAD_AVAILABLE_MAX, WORKLOAD_BALANCED_MAX } from '../../common/config/constants';
 import { ScopeService } from '../../common/authorization/scope.service';
-import { ValidationError } from '../../common/errors';
+import { ForbiddenError, ValidationError } from '../../common/errors';
 import { AuthenticatedUser } from '../../common/middleware/authenticate';
 import { GoalStatus } from '../goals/goals.entity';
 import { GoalProjection, GoalService } from '../goals/goals.service';
 import { TaskStatus } from '../tasks/tasks.entity';
 import { isTaskOverdue } from '../tasks/tasks.service';
 import { UserRole } from '../users/users.entity';
-import { AllocationRepository, EmployeeWorkloadData } from './allocation.repository';
+import {
+  AllocationRepository,
+  CompanyWorkloadFilter,
+  EmployeeWorkloadData,
+} from './allocation.repository';
 
 export type WorkloadClassification = 'AVAILABLE' | 'BALANCED' | 'OVERLOADED';
 
@@ -34,6 +38,46 @@ export interface TeamSummaryResult {
   kpis: TeamSummaryKpis;
   employees: EmployeeWorkload[];
   activeGoals: GoalProjection[];
+}
+
+export interface CompanySummaryFilter {
+  from?: string;
+  to?: string;
+  teamId?: string;
+  goalId?: string;
+}
+
+export interface CompanySummaryKpis {
+  totalTeams: number;
+  totalEmployees: number;
+  activeGoals: number;
+  totalTasks: number;
+  overdueTasks: number;
+}
+
+export interface CompanyTeamSummary {
+  teamId: string;
+  teamName: string;
+  memberCount: number;
+  activeGoals: number;
+  totalTasks: number;
+  overdueTasks: number;
+  averageUtilisation: number;
+  overloadedMemberCount: number;
+  availableMemberCount: number;
+}
+
+export interface CompanyEmployeeWorkload extends EmployeeWorkload {
+  teamId: string;
+  teamName: string;
+}
+
+export interface CompanySummaryResult {
+  range: TeamSummaryRange;
+  filters: Pick<CompanySummaryFilter, 'teamId' | 'goalId'>;
+  kpis: CompanySummaryKpis;
+  teams: CompanyTeamSummary[];
+  employees: CompanyEmployeeWorkload[];
 }
 
 function calculateUtilisation(estimatedHours: number, capacityHours: number): number {
@@ -98,7 +142,75 @@ export class AllocationService {
   ): Promise<EmployeeWorkload[]> {
     const workloadData = await this.allocationRepository.getEmployeeWorkloadData(teamId, from, to);
 
-    return workloadData.map((employee) => ({
+    return workloadData.map((employee) => this.toEmployeeWorkload(employee));
+  }
+
+  async getCompanySummary(
+    filter: CompanySummaryFilter,
+    caller: AuthenticatedUser,
+  ): Promise<CompanySummaryResult> {
+    if (caller.role !== UserRole.SUPER_ADMIN) {
+      throw new ForbiddenError('Only Super Admins can view the company dashboard');
+    }
+
+    const range = this.resolveCompanyRange(filter);
+    const repositoryFilter: CompanyWorkloadFilter = {
+      ...range,
+      teamId: filter.teamId,
+      goalId: filter.goalId,
+    };
+    const workloadData = await this.allocationRepository.getCompanyWorkloadData(repositoryFilter);
+    const today = new Date().toISOString().slice(0, 10);
+
+    const teams = workloadData.map((team) => {
+      const employees = team.employees.map((employee) => this.toEmployeeWorkload(employee));
+      const totalUtilisation = employees.reduce(
+        (sum, employee) => sum + employee.utilisation,
+        0,
+      );
+
+      return {
+        teamId: team.teamId,
+        teamName: team.teamName,
+        memberCount: employees.length,
+        activeGoals: team.activeGoalCount,
+        totalTasks: team.tasks.length,
+        overdueTasks: team.tasks.filter((task) =>
+          isTaskOverdue(task.dueDate, task.status, today),
+        ).length,
+        averageUtilisation: employees.length === 0 ? 0 : totalUtilisation / employees.length,
+        overloadedMemberCount: employees.filter(
+          (employee) => employee.workload === 'OVERLOADED',
+        ).length,
+        availableMemberCount: employees.filter((employee) => employee.workload === 'AVAILABLE')
+          .length,
+      };
+    });
+    const employees = workloadData.flatMap((team) =>
+      team.employees.map((employee) => ({
+        teamId: team.teamId,
+        teamName: team.teamName,
+        ...this.toEmployeeWorkload(employee),
+      })),
+    );
+
+    return {
+      range,
+      filters: { teamId: filter.teamId, goalId: filter.goalId },
+      kpis: {
+        totalTeams: teams.length,
+        totalEmployees: teams.reduce((sum, team) => sum + team.memberCount, 0),
+        activeGoals: teams.reduce((sum, team) => sum + team.activeGoals, 0),
+        totalTasks: teams.reduce((sum, team) => sum + team.totalTasks, 0),
+        overdueTasks: teams.reduce((sum, team) => sum + team.overdueTasks, 0),
+      },
+      teams,
+      employees,
+    };
+  }
+
+  private toEmployeeWorkload(employee: EmployeeWorkloadData): EmployeeWorkload {
+    return {
       ...employee,
       utilisation: calculateUtilisation(
         employee.estimatedHoursOnActiveTasks,
@@ -108,6 +220,30 @@ export class AllocationService {
         employee.estimatedHoursOnActiveTasks,
         employee.weeklyCapacityHours,
       ),
-    }));
+    };
+  }
+
+  private resolveCompanyRange(filter: CompanySummaryFilter): TeamSummaryRange {
+    if (Boolean(filter.from) !== Boolean(filter.to)) {
+      throw new ValidationError('From and to dates must be provided together');
+    }
+    if (filter.from && filter.to) {
+      if (filter.from > filter.to) {
+        throw new ValidationError('From date must be on or before to date');
+      }
+      return { from: filter.from, to: filter.to };
+    }
+
+    const today = new Date();
+    const daysSinceMonday = (today.getUTCDay() + 6) % 7;
+    const monday = new Date(today);
+    monday.setUTCDate(today.getUTCDate() - daysSinceMonday);
+    const sunday = new Date(monday);
+    sunday.setUTCDate(monday.getUTCDate() + 6);
+
+    return {
+      from: monday.toISOString().slice(0, 10),
+      to: sunday.toISOString().slice(0, 10),
+    };
   }
 }

@@ -1,12 +1,17 @@
 import { Navigation } from '../components/Navigation';
 import { useAuth } from '../auth/AuthContext';
 import { TeamDashboardPage } from './TeamDashboardPage';
+import { CompanyDashboardPage } from './CompanyDashboardPage';
 
 export function HomePage() {
   const { user } = useAuth();
 
   if (user?.role === 'TEAM_LEAD') {
     return <TeamDashboardPage />;
+  }
+
+  if (user?.role === 'SUPER_ADMIN') {
+    return <CompanyDashboardPage />;
   }
 
   return (

@@ -32,3 +32,41 @@ export interface TeamSummaryResponse {
   employees: EmployeeWorkload[];
   activeGoals: Goal[];
 }
+
+export interface CompanyDashboardFilters {
+  teamId?: string;
+  goalId?: string;
+}
+
+export interface CompanyDashboardKpis {
+  totalTeams: number;
+  totalEmployees: number;
+  activeGoals: number;
+  totalTasks: number;
+  overdueTasks: number;
+}
+
+export interface CompanyTeamSummary {
+  teamId: string;
+  teamName: string;
+  memberCount: number;
+  activeGoals: number;
+  totalTasks: number;
+  overdueTasks: number;
+  averageUtilisation: number;
+  overloadedMemberCount: number;
+  availableMemberCount: number;
+}
+
+export interface CompanyEmployeeWorkload extends EmployeeWorkload {
+  teamId: string;
+  teamName: string;
+}
+
+export interface CompanySummaryResponse {
+  range: DashboardDateRange;
+  filters: CompanyDashboardFilters;
+  kpis: CompanyDashboardKpis;
+  teams: CompanyTeamSummary[];
+  employees: CompanyEmployeeWorkload[];
+}

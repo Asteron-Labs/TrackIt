@@ -1240,6 +1240,29 @@ textarea {
   white-space: nowrap;
 }
 
+.company-dashboard-filter {
+  display: grid;
+  grid-template-columns: minmax(160px, 1fr) minmax(190px, 1.2fr) repeat(2, minmax(145px, 180px)) auto;
+  align-items: end;
+  gap: 12px;
+  margin-bottom: 24px;
+  padding: 18px;
+  background: #ffffff;
+  border: 1px solid #dce6df;
+  border-radius: 12px;
+}
+
+.company-dashboard-filter label {
+  display: grid;
+  gap: 7px;
+  margin: 0;
+}
+
+.company-dashboard-filter .submit-button {
+  margin: 0;
+  white-space: nowrap;
+}
+
 .dashboard-error {
   margin-bottom: 22px;
 }
@@ -1298,6 +1321,43 @@ textarea {
 
 .workload-table tbody tr:last-child td {
   border-bottom: 0;
+}
+
+.company-dashboard-panel {
+  margin-top: 24px;
+}
+
+.company-team-table,
+.company-allocation-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 14px;
+}
+
+.company-team-table th,
+.company-team-table td,
+.company-allocation-table th,
+.company-allocation-table td {
+  padding: 13px 12px;
+  text-align: left;
+  border-bottom: 1px solid #e3ebe6;
+}
+
+.company-team-table th,
+.company-allocation-table th {
+  color: #506159;
+  font-size: 12px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.company-team-table tbody tr:last-child td,
+.company-allocation-table tbody tr:last-child td {
+  border-bottom: 0;
+}
+
+.overloaded-count {
+  color: #a12b2b;
 }
 
 .workload-badge {
@@ -1453,6 +1513,14 @@ textarea {
     grid-template-columns: 1fr 1fr auto;
   }
 
+  .company-dashboard-filter {
+    grid-template-columns: repeat(2, minmax(160px, 1fr));
+  }
+
+  .company-dashboard-filter .submit-button {
+    width: fit-content;
+  }
+
   .dashboard-kpis {
     grid-template-columns: repeat(3, minmax(120px, 1fr));
   }
@@ -1528,7 +1596,8 @@ textarea {
 
   .effort-summary,
   .team-timesheet-filter,
-  .dashboard-filter {
+  .dashboard-filter,
+  .company-dashboard-filter {
     grid-template-columns: 1fr;
   }
 
@@ -1537,6 +1606,10 @@ textarea {
   }
 
   .dashboard-filter .submit-button {
+    width: 100%;
+  }
+
+  .company-dashboard-filter .submit-button {
     width: 100%;
   }
 

@@ -1,11 +1,11 @@
 import { FormEvent, useEffect, useState } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useParams } from 'react-router-dom';
 import { apiRequest } from '../api/client';
 import { EmployeeWorkloadTable } from '../components/EmployeeWorkloadTable';
 import { GoalProgress } from '../components/GoalProgress';
 import { Navigation } from '../components/Navigation';
 import type { TeamSummaryResponse } from '../types/dashboard';
-import type { Team, TeamsResponse } from '../types/team';
+import type { Team, TeamDetailsResponse, TeamsResponse } from '../types/team';
 
 function currentWeekRange(): { from: string; to: string } {
   const today = new Date();
@@ -43,6 +43,7 @@ function DashboardSkeleton() {
 }
 
 export function TeamDashboardPage() {
+  const { id: routeTeamId } = useParams();
   const [team, setTeam] = useState<Team | null>(null);
   const [summary, setSummary] = useState<TeamSummaryResponse | null>(null);
   const [from, setFrom] = useState('');
@@ -61,15 +62,21 @@ export function TeamDashboardPage() {
       setError('');
 
       try {
-        const teamsResponse = await apiRequest<TeamsResponse>('/teams');
-        const ledTeam = teamsResponse.teams[0];
-        if (!ledTeam) return;
+        let dashboardTeam: Team | undefined;
+        if (routeTeamId) {
+          const teamResponse = await apiRequest<TeamDetailsResponse>(`/teams/${routeTeamId}`);
+          dashboardTeam = teamResponse.team;
+        } else {
+          const teamsResponse = await apiRequest<TeamsResponse>('/teams');
+          dashboardTeam = teamsResponse.teams[0];
+        }
+        if (!dashboardTeam) return;
 
         const summaryResponse = await apiRequest<TeamSummaryResponse>(
-          summaryPath(ledTeam.id, initialRange.from, initialRange.to),
+          summaryPath(dashboardTeam.id, initialRange.from, initialRange.to),
         );
         if (!requestWasCancelled) {
-          setTeam(ledTeam);
+          setTeam(dashboardTeam);
           setSummary(summaryResponse);
         }
       } catch (requestError) {
@@ -90,7 +97,7 @@ export function TeamDashboardPage() {
     return () => {
       requestWasCancelled = true;
     };
-  }, []);
+  }, [routeTeamId]);
 
   async function filterDashboard(event: FormEvent<HTMLFormElement>): Promise<void> {
     event.preventDefault();
@@ -142,6 +149,11 @@ export function TeamDashboardPage() {
 
         {!isLoading && team && summary && (
           <>
+            {routeTeamId && (
+              <Link className="back-link" to="/">
+                ← Back to company overview
+              </Link>
+            )}
             <header className="page-heading dashboard-heading">
               <div>
                 <p className="eyebrow">Team dashboard</p>

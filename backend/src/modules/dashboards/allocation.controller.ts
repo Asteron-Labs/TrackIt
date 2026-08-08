@@ -3,7 +3,11 @@ import { z } from 'zod';
 import { requireRole } from '../../common/middleware/authorize';
 import { validate } from '../../common/middleware/validate';
 import { UserRole } from '../users/users.entity';
-import { AllocationService, TeamSummaryRange } from './allocation.service';
+import {
+  AllocationService,
+  CompanySummaryFilter,
+  TeamSummaryRange,
+} from './allocation.service';
 
 const dateOnlySchema = z
   .string()
@@ -23,6 +27,18 @@ const teamSummaryRangeSchema = z
     to: dateOnlySchema,
   })
   .strict();
+
+const companySummaryQuerySchema = z
+  .object({
+    from: dateOnlySchema.optional(),
+    to: dateOnlySchema.optional(),
+    teamId: z.string().uuid().optional(),
+    goalId: z.string().uuid().optional(),
+  })
+  .strict()
+  .refine((query) => Boolean(query.from) === Boolean(query.to), {
+    message: 'From and to dates must be provided together',
+  });
 
 export function createAllocationRouter(
   allocationService: AllocationService,
@@ -50,4 +66,31 @@ export function createAllocationRouter(
   );
 
   return allocationRouter;
+}
+
+export function createCompanyAllocationRouter(
+  allocationService: AllocationService,
+  requireAuth: RequestHandler,
+): Router {
+  const companyAllocationRouter = Router();
+
+  companyAllocationRouter.use(requireAuth);
+  companyAllocationRouter.get(
+    '/summary',
+    requireRole(UserRole.SUPER_ADMIN),
+    validate({ query: companySummaryQuerySchema }),
+    async (req, res, next) => {
+      try {
+        const summary = await allocationService.getCompanySummary(
+          req.query as unknown as CompanySummaryFilter,
+          req.user!,
+        );
+        res.status(200).json(summary);
+      } catch (error) {
+        next(error);
+      }
+    },
+  );
+
+  return companyAllocationRouter;
 }
