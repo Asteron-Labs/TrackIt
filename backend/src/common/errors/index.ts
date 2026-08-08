@@ -28,6 +28,13 @@ export class UnauthorizedError extends AppError {
   }
 }
 
+/** 401 — deliberately identical for an unknown email and an incorrect password. */
+export class InvalidCredentialsError extends UnauthorizedError {
+  constructor() {
+    super('Invalid email or password');
+  }
+}
+
 /** 403 — valid token, wrong role or resource outside caller's scope. */
 export class ForbiddenError extends AppError {
   constructor(message = 'Forbidden') {

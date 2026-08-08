@@ -1,4 +1,4 @@
-# Starts the TrackIt API and its PostgreSQL database with one command:
+# Starts the TrackIt frontend, API and PostgreSQL database with one command:
 #   docker compose up
 #
 # The top-level `version:` key is intentionally omitted — it is obsolete under the
@@ -39,6 +39,19 @@ services:
     # node_modules from being shadowed by the host mount.
     volumes:
       - ./backend:/app
+      - /app/node_modules
+
+  frontend:
+    build: ./frontend
+    restart: unless-stopped
+    environment:
+      VITE_API_TARGET: http://api:3000
+    depends_on:
+      - api
+    ports:
+      - '5173:5173'
+    volumes:
+      - ./frontend:/app
       - /app/node_modules
 
 volumes:

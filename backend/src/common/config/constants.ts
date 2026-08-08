@@ -16,6 +16,7 @@ export const NO_PROGRESS_DAYS = 5;
 
 // Auth
 export const JWT_EXPIRY = '24h';
+export const BCRYPT_SALT_ROUNDS = 10;
 
 // Priority score — business priority
 export const PRIORITY_HIGH = 30;

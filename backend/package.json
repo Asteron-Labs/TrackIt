@@ -9,6 +9,8 @@
   "scripts": {
     "dev": "ts-node-dev --respawn --transpile-only src/index.ts",
     "build": "tsc",
+    "test": "node --test -r ts-node/register/files src/**/*.test.ts",
+    "seed": "ts-node src/scripts/seed-users.ts",
     "start": "node dist/index.js",
     "lint": "eslint .",
     "format": "prettier --write .",
@@ -18,8 +20,10 @@
     "migration:revert": "npm run typeorm -- migration:revert -d src/data-source.ts"
   },
   "dependencies": {
+    "bcrypt": "^6.0.0",
     "dotenv": "^16.4.5",
     "express": "^4.21.2",
+    "jsonwebtoken": "^9.0.3",
     "pg": "^8.13.1",
     "reflect-metadata": "^0.2.2",
     "typeorm": "^0.3.20",
@@ -27,7 +31,9 @@
   },
   "devDependencies": {
     "@eslint/js": "^9.17.0",
+    "@types/bcrypt": "^6.0.0",
     "@types/express": "^4.17.21",
+    "@types/jsonwebtoken": "^9.0.10",
     "@types/node": "^24.0.0",
     "eslint": "^9.17.0",
     "globals": "^15.14.0",

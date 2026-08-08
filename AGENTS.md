@@ -13,8 +13,18 @@ progress, workload and delivery risk.
 Read `docs/DOMAIN.md` before your first task. It defines the vocabulary used everywhere
 in this codebase.
 
-**This is a deliberately scoped project.** Prefer the simple, obvious implementation.
+**This is a deliberately scoped project.** Prefer the simple, human readble code, do not make implementation too abstract and complicated, obvious implementation.
 Do not add abstraction, configuration, or infrastructure that no current story requires.
+
+---
+
+## Code style — read before writing any code
+
+All application code follows the **mid-level-engineer** style guide:
+`.claude/skills/mid-level-engineer/SKILL.md`. Read it before implementing, refactoring, or
+reviewing code. It is the single source of truth for how code should read here — clean,
+flat, minimal abstraction, medium complexity. Claude Code loads it automatically; other
+agents must open the file directly.
 
 ---
 
@@ -69,11 +79,11 @@ Two places, never anywhere else:
 
 Error contract:
 
-| Situation | Status |
-| --- | --- |
-| No token / expired / malformed | 401 |
-| Valid token, wrong role | 403 |
-| Valid token, resource outside caller's scope | 403 |
+| Situation                                    | Status |
+| -------------------------------------------- | ------ |
+| No token / expired / malformed               | 401    |
+| Valid token, wrong role                      | 403    |
+| Valid token, resource outside caller's scope | 403    |
 
 **Scope filtering happens in the query, not after it.** An endpoint that fetches a team's
 tasks and filters to the caller's own in JavaScript is a security bug, even if the response
@@ -86,11 +96,11 @@ looks correct.
 Three calculations are consumed by several features. Each lives in one place as a pure
 function with no repository access. **Import them. Do not re-implement them.**
 
-| Function | Lives in | Used by |
-| --- | --- | --- |
+| Function                                          | Lives in                           | Used by                                         |
+| ------------------------------------------------- | ---------------------------------- | ----------------------------------------------- |
 | `classifyWorkload(estimatedHours, capacityHours)` | `dashboards/allocation.service.ts` | team dashboard, company overview, overload risk |
-| `computeBlockedStates(taskIds)` | `tasks/dependency.service.ts` | task views, priority scoring, blocked risk |
-| `calculateScore(task, context)` | `tasks/priority.service.ts` | recommendations, sorting |
+| `computeBlockedStates(taskIds)`                   | `tasks/dependency.service.ts`      | task views, priority scoring, blocked risk      |
+| `calculateScore(task, context)`                   | `tasks/priority.service.ts`        | recommendations, sorting                        |
 
 Two definitions must also be written once and reused:
 

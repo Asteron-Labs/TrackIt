@@ -12,13 +12,11 @@ for the engineering rules.
 | Layer      | Technology                          |
 | ---------- | ----------------------------------- |
 | Backend    | Node.js + Express + TypeScript      |
+| Frontend   | React + TypeScript + Vite           |
 | Database   | PostgreSQL + TypeORM                |
 | Validation | Zod (at the controller boundary)    |
-| Auth       | JWT _(from TRACKIT-13 onward)_      |
+| Auth       | JWT                                 |
 | Dev        | Docker Compose                      |
-
-> The frontend (React + TypeScript) is scaffolded in a later step and is not yet part of
-> this repository or the Compose stack.
 
 ## Architecture — the four-layer convention
 
@@ -44,8 +42,8 @@ The `GET /health` endpoint under `backend/src/health/` demonstrates the flow end
 entity of its own. Entity-backed module repositories extend the shared
 `backend/src/common/repository/base.repository.ts`.
 
-The eight module folders (`auth`, `users`, `teams`, `goals`, `tasks`, `timesheets`,
-`dashboards`, `audit`) are committed empty; each story fills in its own module.
+The eight module folders are filled story by story. TRACKIT-13 implements the `auth` and `users`
+foundations; the remaining modules stay empty until their own stories.
 
 ## Prerequisites
 
@@ -54,17 +52,48 @@ The eight module folders (`auth`, `users`, `teams`, `goals`, `tasks`, `timesheet
 
 ## Running with Docker (recommended)
 
-One command brings up the API and PostgreSQL:
+One command brings up the frontend, API and PostgreSQL:
 
 ```bash
 cp backend/.env.example backend/.env   # first time only
 docker compose up
 ```
 
+- Frontend: http://localhost:5173
 - API: http://localhost:3000
 - PostgreSQL: localhost:5432
 
-The API container runs with hot reload — edits under `backend/src` restart it automatically.
+The API and frontend containers run with hot reload.
+
+### Seeded login users
+
+After applying migrations, seed the three simulation roles:
+
+```bash
+cd backend
+npm run migration:run
+npm run seed
+```
+
+All seeded users use the password `TrackIt123!`:
+
+| Role | Email |
+| --- | --- |
+| Super Admin | `admin@trackit.local` |
+| Team Lead | `lead@trackit.local` |
+| Employee | `employee@trackit.local` |
+
+The seed command is idempotent. Passwords are stored only as bcrypt hashes.
+
+### Authentication API
+
+`POST /auth/login` accepts `email` and `password`, returning a 24-hour JWT and safe user
+projection. `GET /auth/me` accepts `Authorization: Bearer <token>` and restores that projection.
+Wrong passwords and unknown emails deliberately return the same `401` response.
+
+The frontend stores the JWT in `localStorage` for this simulation. This survives reloads and is
+simple to inspect, but an XSS vulnerability could expose the token. Refresh tokens and
+production-grade cookie sessions are outside this story.
 
 ### Health check
 
@@ -88,8 +117,8 @@ npm run migration:revert   # roll back the most recent migration
 npm run migration:create -- src/migrations/<Name>   # scaffold a new migration
 ```
 
-The repository ships one intentionally empty migration so the tooling is proven to run
-and revert. Real schema arrives with the first entity story.
+The initial no-op migration proves the tooling. TRACKIT-13 adds the first real schema migration
+for users and roles.
 
 ## Running the backend on the host
 
@@ -107,12 +136,26 @@ npm run build               # type-check and compile to dist/
 npm start                   # run the compiled build
 npm run lint                # ESLint
 npm run format              # Prettier
+npm test                    # authentication unit tests
+npm run seed                # create simulation login users
 ```
+
+## Running the frontend on the host
+
+```bash
+cd frontend
+npm install
+npm run dev
+```
+
+Vite proxies `/auth` and `/health` to `http://localhost:3000` by default. Set
+`VITE_API_TARGET` when the API is available elsewhere.
 
 ## Configuration
 
 - Machine/deployment settings (port, database connection) are read from the environment
   and validated at boot — see `backend/src/common/config/env.ts`.
+- `JWT_SECRET` must contain at least 32 characters.
 - Tunable domain constants live in `backend/src/common/config/constants.ts` and are never
   inlined elsewhere.
 
@@ -120,10 +163,10 @@ npm run format              # Prettier
 
 ```
 .
-├── docker-compose.yml          # api + postgres, one-command startup
+├── docker-compose.yml          # frontend + api + postgres
 ├── docs/DOMAIN.md              # domain model and vocabulary
 ├── AGENTS.md                   # engineering rules
-└── backend/
+├── backend/
     ├── Dockerfile
     └── src/
         ├── index.ts            # entrypoint: init DataSource, start server
@@ -137,4 +180,6 @@ npm run format              # Prettier
         ├── migrations/         # TypeORM migrations
         └── modules/            # auth, users, teams, goals, tasks,
                                 # timesheets, dashboards, audit
+└── frontend/
+    └── src/                    # React auth context, routes, pages and navigation
 ```
