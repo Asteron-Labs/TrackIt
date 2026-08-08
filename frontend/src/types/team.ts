@@ -16,6 +16,7 @@ export interface TeamMember {
   email: string;
   role: UserRole;
   teamId: string;
+  joinedAt: string;
 }
 
 export interface TeamDetails extends Team {
@@ -34,4 +35,12 @@ export interface TeamResponse {
 
 export interface TeamDetailsResponse {
   team: TeamDetails;
+}
+
+export interface TeamMemberResponse {
+  member: TeamMember;
+}
+
+export interface TeamLeadResponse {
+  lead: TeamMember;
 }

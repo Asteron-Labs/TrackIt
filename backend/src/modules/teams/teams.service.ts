@@ -1,8 +1,9 @@
 import { DEFAULT_WEEKLY_CAPACITY } from '../../common/config/constants';
 import { ConflictError, ForbiddenError, NotFoundError } from '../../common/errors';
 import { AuthenticatedUser } from '../../common/middleware/authenticate';
-import { UserRole } from '../users/users.entity';
-import { Team } from './teams.entity';
+import { User, UserRole } from '../users/users.entity';
+import { UsersService } from '../users/users.service';
+import { Team, TeamMember } from './teams.entity';
 import { TeamRepository } from './teams.repository';
 
 export interface CreateTeamDto {
@@ -27,6 +28,7 @@ export interface TeamMemberProjection {
   email: string;
   role: UserRole;
   teamId: string;
+  joinedAt: Date;
 }
 
 export interface TeamDetailsProjection extends TeamProjection {
@@ -36,7 +38,10 @@ export interface TeamDetailsProjection extends TeamProjection {
 }
 
 export class TeamsService {
-  constructor(private readonly teamRepository: TeamRepository) {}
+  constructor(
+    private readonly teamRepository: TeamRepository,
+    private readonly usersService: UsersService,
+  ) {}
 
   async createTeam(dto: CreateTeamDto): Promise<TeamProjection> {
     const nameExists = await this.teamRepository.existsByName(dto.name);
@@ -65,24 +70,85 @@ export class TeamsService {
       throw new NotFoundError('Team not found');
     }
 
-    const result = await this.teamRepository.findByIdWithMembers(
-      teamId,
-      this.accessFilterFor(caller),
-    );
-    if (!result) {
+    const team = await this.teamRepository.findByIdWithAccess(teamId, this.accessFilterFor(caller));
+    if (!team) {
       throw new ForbiddenError('You do not have access to this team');
     }
 
+    const members = await this.teamRepository.findMembersByTeam(teamId);
     return {
-      ...this.toProjection(result.team),
-      lead: result.lead,
-      members: result.members,
-      memberCount: result.members.length,
+      ...this.toProjection(team),
+      lead: members.find((member) => member.id === team.leadId) ?? null,
+      members,
+      memberCount: members.length,
     };
+  }
+
+  async addMember(teamId: string, userId: string): Promise<TeamMemberProjection> {
+    await this.assertTeamExists(teamId);
+    const user = await this.usersService.findById(userId);
+    if (!user) {
+      throw new NotFoundError('User not found');
+    }
+    if (user.role !== UserRole.EMPLOYEE) {
+      throw new ConflictError('Only employees can be added to a team');
+    }
+
+    const existingTeams = await this.teamRepository.findTeamsByUser(userId);
+    if (existingTeams.some((team) => team.id === teamId)) {
+      throw new ConflictError('Employee is already a member of this team');
+    }
+    if (existingTeams.length > 0) {
+      throw new ConflictError('Employee already belongs to another team');
+    }
+
+    const membership = await this.teamRepository.addMember(teamId, userId);
+    return this.toMemberProjection(user, membership);
+  }
+
+  async assignTeamLead(teamId: string, userId: string): Promise<TeamMemberProjection> {
+    await this.assertTeamExists(teamId);
+    const isMember = await this.teamRepository.isMember(userId, teamId);
+    if (!isMember) {
+      throw new ConflictError('The team lead must already be a member of this team');
+    }
+
+    await this.teamRepository.assignTeamLead(teamId, userId);
+    const members = await this.teamRepository.findMembersByTeam(teamId);
+    const lead = members.find((member) => member.id === userId);
+    if (!lead) {
+      throw new NotFoundError('Team member not found');
+    }
+    return lead;
+  }
+
+  async removeMember(teamId: string, userId: string): Promise<void> {
+    const team = await this.assertTeamExists(teamId);
+    const isMember = await this.teamRepository.isMember(userId, teamId);
+    if (!isMember) {
+      throw new NotFoundError('Team member not found');
+    }
+    if (team.leadId === userId) {
+      throw new ConflictError('Reassign the team lead before removing this member');
+    }
+
+    await this.teamRepository.removeMember(teamId, userId);
   }
 
   isLedBy(userId: string, teamId: string): Promise<boolean> {
     return this.teamRepository.isLedBy(userId, teamId);
+  }
+
+  isMember(userId: string, teamId: string): Promise<boolean> {
+    return this.teamRepository.isMember(userId, teamId);
+  }
+
+  private async assertTeamExists(teamId: string): Promise<Team> {
+    const team = await this.teamRepository.findById(teamId);
+    if (!team) {
+      throw new NotFoundError('Team not found');
+    }
+    return team;
   }
 
   private accessFilterFor(caller: AuthenticatedUser) {
@@ -100,6 +166,17 @@ export class TeamsService {
       weeklyCapacityHours: team.weeklyCapacityHours,
       createdAt: team.createdAt,
       updatedAt: team.updatedAt,
+    };
+  }
+
+  private toMemberProjection(user: User, membership: TeamMember): TeamMemberProjection {
+    return {
+      id: user.id,
+      name: user.name,
+      email: user.email,
+      role: user.role,
+      teamId: membership.teamId,
+      joinedAt: membership.joinedAt,
     };
   }
 }

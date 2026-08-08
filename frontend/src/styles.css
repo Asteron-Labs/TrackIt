@@ -41,12 +41,7 @@ button {
   place-items: center;
   padding: 24px;
   background:
-    radial-gradient(
-      circle at top left,
-      rgba(80, 151, 117, 0.22),
-      transparent 34%
-    ),
-    #f4f7f5;
+    radial-gradient(circle at top left, rgba(80, 151, 117, 0.22), transparent 34%), #f4f7f5;
 }
 
 .login-panel {
@@ -164,7 +159,8 @@ textarea {
 }
 
 .submit-button,
-.logout-button {
+.logout-button,
+.danger-button {
   border: 0;
   border-radius: 9px;
   font-weight: 750;
@@ -462,6 +458,33 @@ textarea {
   font-size: 13px;
   font-weight: 750;
   white-space: nowrap;
+}
+
+.member-management-form {
+  gap: 9px;
+}
+
+.members-panel {
+  grid-column: 1 / -1;
+}
+
+.membership-error {
+  margin-bottom: 18px;
+}
+
+.danger-button {
+  padding: 8px 11px;
+  color: #8b2020;
+  background: #fff0f0;
+}
+
+.danger-button:hover:not(:disabled) {
+  background: #fbdede;
+}
+
+.danger-button:disabled {
+  cursor: wait;
+  opacity: 0.6;
 }
 
 .role-badge {

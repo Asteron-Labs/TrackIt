@@ -1,12 +1,8 @@
 import { ForbiddenError } from '../errors';
 import { TeamsService } from '../../modules/teams/teams.service';
-import { UsersService } from '../../modules/users/users.service';
 
 export class ScopeService {
-  constructor(
-    private readonly teamsService: TeamsService,
-    private readonly usersService: UsersService,
-  ) {}
+  constructor(private readonly teamsService: TeamsService) {}
 
   async assertTeamLeadOf(userId: string, teamId: string): Promise<void> {
     const leadsTeam = await this.teamsService.isLedBy(userId, teamId);
@@ -16,7 +12,7 @@ export class ScopeService {
   }
 
   async assertMemberOf(userId: string, teamId: string): Promise<void> {
-    const belongsToTeam = await this.usersService.isMemberOfTeam(userId, teamId);
+    const belongsToTeam = await this.teamsService.isMember(userId, teamId);
     if (!belongsToTeam) {
       throw new ForbiddenError();
     }

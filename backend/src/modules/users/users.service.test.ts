@@ -3,7 +3,7 @@ import test from 'node:test';
 import bcrypt from 'bcrypt';
 import { ConflictError } from '../../common/errors';
 import { User, UserRole } from './users.entity';
-import { CreateUserRecord, UserFilter, UserRepository } from './users.repository';
+import { CreateUserRecord, UserFilter, UserListRecord, UserRepository } from './users.repository';
 import { UsersService } from './users.service';
 
 function createStoredUser(overrides: Partial<User> = {}): User {
@@ -13,7 +13,6 @@ function createStoredUser(overrides: Partial<User> = {}): User {
   user.email = 'asha@example.com';
   user.passwordHash = 'stored-password-hash';
   user.role = UserRole.EMPLOYEE;
-  user.teamId = null;
   user.createdAt = new Date();
   user.updatedAt = new Date();
   return Object.assign(user, overrides);
@@ -81,7 +80,7 @@ test('listUsers forwards repository filters and removes password hashes', async 
   const userRepository = {
     findAll: async (filter: UserFilter) => {
       receivedFilter = filter;
-      return [createStoredUser()];
+      return [{ user: createStoredUser(), teamId: null } satisfies UserListRecord];
     },
   } as unknown as UserRepository;
   const usersService = new UsersService(userRepository);

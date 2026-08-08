@@ -15,6 +15,15 @@ const teamIdSchema = z.object({
   id: z.string().uuid(),
 });
 
+const teamMemberParamsSchema = z.object({
+  id: z.string().uuid(),
+  userId: z.string().uuid(),
+});
+
+const userIdSchema = z.object({
+  userId: z.string().uuid(),
+});
+
 export function createTeamsRouter(teamsService: TeamsService, requireAuth: RequestHandler): Router {
   const teamsRouter = Router();
 
@@ -42,6 +51,48 @@ export function createTeamsRouter(teamsService: TeamsService, requireAuth: Reque
       next(error);
     }
   });
+
+  teamsRouter.post(
+    '/:id/members',
+    requireRole(UserRole.SUPER_ADMIN),
+    validate({ params: teamIdSchema, body: userIdSchema }),
+    async (req, res, next) => {
+      try {
+        const member = await teamsService.addMember(req.params.id, req.body.userId);
+        res.status(201).json({ member });
+      } catch (error) {
+        next(error);
+      }
+    },
+  );
+
+  teamsRouter.delete(
+    '/:id/members/:userId',
+    requireRole(UserRole.SUPER_ADMIN),
+    validate({ params: teamMemberParamsSchema }),
+    async (req, res, next) => {
+      try {
+        await teamsService.removeMember(req.params.id, req.params.userId);
+        res.status(204).send();
+      } catch (error) {
+        next(error);
+      }
+    },
+  );
+
+  teamsRouter.put(
+    '/:id/lead',
+    requireRole(UserRole.SUPER_ADMIN),
+    validate({ params: teamIdSchema, body: userIdSchema }),
+    async (req, res, next) => {
+      try {
+        const lead = await teamsService.assignTeamLead(req.params.id, req.body.userId);
+        res.status(200).json({ lead });
+      } catch (error) {
+        next(error);
+      }
+    },
+  );
 
   teamsRouter.get('/:id', validate({ params: teamIdSchema }), async (req, res, next) => {
     try {

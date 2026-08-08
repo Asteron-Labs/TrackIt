@@ -25,7 +25,7 @@ export function createApp(): Express {
   app.use(healthRouter);
 
   const usersService = new UsersService(new UserRepository(AppDataSource));
-  const teamsService = new TeamsService(new TeamRepository(AppDataSource));
+  const teamsService = new TeamsService(new TeamRepository(AppDataSource), usersService);
   const authService = new AuthService(usersService, env.JWT_SECRET);
   const authenticationMiddleware = requireAuth(env.JWT_SECRET);
 

@@ -3,19 +3,16 @@ import test from 'node:test';
 import { ForbiddenError } from '../errors';
 import { TeamRepository } from '../../modules/teams/teams.repository';
 import { TeamsService } from '../../modules/teams/teams.service';
-import { UserRepository } from '../../modules/users/users.repository';
 import { UsersService } from '../../modules/users/users.service';
 import { ScopeService } from './scope.service';
 
 function createScopeService(leadsTeam: boolean, belongsToTeam: boolean): ScopeService {
   const teamRepository = {
     isLedBy: async () => leadsTeam,
+    isMember: async () => belongsToTeam,
   } as unknown as TeamRepository;
-  const userRepository = {
-    isMemberOfTeam: async () => belongsToTeam,
-  } as unknown as UserRepository;
 
-  return new ScopeService(new TeamsService(teamRepository), new UsersService(userRepository));
+  return new ScopeService(new TeamsService(teamRepository, {} as UsersService));
 }
 
 function isForbidden(error: unknown): boolean {

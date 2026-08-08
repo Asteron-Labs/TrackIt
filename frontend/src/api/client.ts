@@ -16,10 +16,7 @@ export class ApiError extends Error {
   }
 }
 
-export async function apiRequest<T>(
-  path: string,
-  options: RequestInit = {},
-): Promise<T> {
+export async function apiRequest<T>(path: string, options: RequestInit = {}): Promise<T> {
   const headers = new Headers(options.headers);
   headers.set('Content-Type', 'application/json');
 
@@ -29,14 +26,12 @@ export async function apiRequest<T>(
   }
 
   const response = await fetch(path, { ...options, headers });
-  const responseBody = (await response.json()) as T & ErrorResponse;
+  const responseBody =
+    response.status === 204 ? undefined : ((await response.json()) as T & ErrorResponse);
 
   if (!response.ok) {
-    throw new ApiError(
-      responseBody.error?.message || 'Request failed',
-      response.status,
-    );
+    throw new ApiError(responseBody?.error?.message || 'Request failed', response.status);
   }
 
-  return responseBody;
+  return responseBody as T;
 }

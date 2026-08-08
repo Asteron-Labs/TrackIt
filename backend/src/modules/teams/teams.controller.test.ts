@@ -12,12 +12,14 @@ import { createTeamsRouter } from './teams.controller';
 import {
   CreateTeamDto,
   TeamDetailsProjection,
+  TeamMemberProjection,
   TeamProjection,
   TeamsService,
 } from './teams.service';
 
 const JWT_SECRET = 'test-secret-that-is-at-least-32-characters';
 const TEAM_ID = '6bf8cd4f-02af-4211-8e0e-619f888f7381';
+const USER_ID = '2a32a99d-5ae1-485f-9bed-bd3470eabf46';
 let receivedCallerRole: UserRole | undefined;
 
 function teamProjection(overrides: Partial<TeamProjection> = {}): TeamProjection {
@@ -30,6 +32,17 @@ function teamProjection(overrides: Partial<TeamProjection> = {}): TeamProjection
     createdAt: new Date('2026-08-08T08:00:00.000Z'),
     updatedAt: new Date('2026-08-08T08:00:00.000Z'),
     ...overrides,
+  };
+}
+
+function memberProjection(role = UserRole.EMPLOYEE): TeamMemberProjection {
+  return {
+    id: USER_ID,
+    name: 'Asha Perera',
+    email: 'asha@example.com',
+    role,
+    teamId: TEAM_ID,
+    joinedAt: new Date('2026-08-08T08:00:00.000Z'),
   };
 }
 
@@ -55,6 +68,17 @@ const teamsService = {
       members: [],
       memberCount: 0,
     };
+  },
+  async addMember(): Promise<TeamMemberProjection> {
+    return memberProjection();
+  },
+  async removeMember(_teamId: string, userId: string): Promise<void> {
+    if (userId === '11111111-1111-4111-8111-111111111111') {
+      throw new ConflictError('Reassign the team lead before removing this member');
+    }
+  },
+  async assignTeamLead(): Promise<TeamMemberProjection> {
+    return memberProjection(UserRole.TEAM_LEAD);
   },
 } as unknown as TeamsService;
 
@@ -182,6 +206,100 @@ test('GET /teams/:id returns an empty team details state', async () => {
 test('GET /teams/:id rejects an invalid team id', async () => {
   const response = await fetch(`${baseUrl}/teams/not-a-uuid`, {
     headers: authorizationHeader(UserRole.SUPER_ADMIN),
+  });
+
+  assert.equal(response.status, 400);
+});
+
+test('a Super Admin can add an employee to a team', async () => {
+  const response = await fetch(`${baseUrl}/teams/${TEAM_ID}/members`, {
+    method: 'POST',
+    headers: {
+      ...authorizationHeader(UserRole.SUPER_ADMIN),
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({ userId: USER_ID }),
+  });
+  const body = (await response.json()) as { member: TeamMemberProjection };
+
+  assert.equal(response.status, 201);
+  assert.equal(body.member.id, USER_ID);
+});
+
+test('a Super Admin can assign a current member as team lead', async () => {
+  const response = await fetch(`${baseUrl}/teams/${TEAM_ID}/lead`, {
+    method: 'PUT',
+    headers: {
+      ...authorizationHeader(UserRole.SUPER_ADMIN),
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({ userId: USER_ID }),
+  });
+  const body = (await response.json()) as { lead: TeamMemberProjection };
+
+  assert.equal(response.status, 200);
+  assert.equal(body.lead.role, UserRole.TEAM_LEAD);
+});
+
+test('a Super Admin can remove an ordinary member', async () => {
+  const response = await fetch(`${baseUrl}/teams/${TEAM_ID}/members/${USER_ID}`, {
+    method: 'DELETE',
+    headers: authorizationHeader(UserRole.SUPER_ADMIN),
+  });
+
+  assert.equal(response.status, 204);
+});
+
+test('removing the current lead returns the service conflict clearly', async () => {
+  const leadId = '11111111-1111-4111-8111-111111111111';
+  const response = await fetch(`${baseUrl}/teams/${TEAM_ID}/members/${leadId}`, {
+    method: 'DELETE',
+    headers: authorizationHeader(UserRole.SUPER_ADMIN),
+  });
+  const body = (await response.json()) as { error: { message: string } };
+
+  assert.equal(response.status, 409);
+  assert.equal(body.error.message, 'Reassign the team lead before removing this member');
+});
+
+for (const role of [UserRole.TEAM_LEAD, UserRole.EMPLOYEE]) {
+  test(`${role} cannot manage team membership or leadership`, async () => {
+    const headers = {
+      ...authorizationHeader(role),
+      'Content-Type': 'application/json',
+    };
+    const responses = await Promise.all([
+      fetch(`${baseUrl}/teams/${TEAM_ID}/members`, {
+        method: 'POST',
+        headers,
+        body: JSON.stringify({ userId: USER_ID }),
+      }),
+      fetch(`${baseUrl}/teams/${TEAM_ID}/lead`, {
+        method: 'PUT',
+        headers,
+        body: JSON.stringify({ userId: USER_ID }),
+      }),
+      fetch(`${baseUrl}/teams/${TEAM_ID}/members/${USER_ID}`, {
+        method: 'DELETE',
+        headers,
+      }),
+    ]);
+
+    assert.deepEqual(
+      responses.map((response) => response.status),
+      [403, 403, 403],
+    );
+  });
+}
+
+test('team management routes validate user ids', async () => {
+  const response = await fetch(`${baseUrl}/teams/${TEAM_ID}/members`, {
+    method: 'POST',
+    headers: {
+      ...authorizationHeader(UserRole.SUPER_ADMIN),
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({ userId: 'not-a-uuid' }),
   });
 
   assert.equal(response.status, 400);

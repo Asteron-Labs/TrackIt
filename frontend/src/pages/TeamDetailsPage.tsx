@@ -1,15 +1,22 @@
 import { useEffect, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import { apiRequest } from '../api/client';
+import { useAuth } from '../auth/AuthContext';
 import { Navigation } from '../components/Navigation';
 import { roleLabels } from '../components/role-navigation';
+import { TeamLeadSelector } from '../components/TeamLeadSelector';
+import { TeamMemberAssignmentForm } from '../components/TeamMemberAssignmentForm';
 import type { TeamDetails, TeamDetailsResponse } from '../types/team';
 
 export function TeamDetailsPage() {
   const { id } = useParams();
+  const { user } = useAuth();
   const [team, setTeam] = useState<TeamDetails | null>(null);
+  const [refreshVersion, setRefreshVersion] = useState(0);
   const [isLoading, setIsLoading] = useState(true);
+  const [removingUserId, setRemovingUserId] = useState('');
   const [error, setError] = useState('');
+  const [membershipError, setMembershipError] = useState('');
 
   useEffect(() => {
     let requestWasCancelled = false;
@@ -23,9 +30,7 @@ export function TeamDetailsPage() {
       .catch((requestError) => {
         if (!requestWasCancelled) {
           setError(
-            requestError instanceof Error
-              ? requestError.message
-              : 'Unable to load team details',
+            requestError instanceof Error ? requestError.message : 'Unable to load team details',
           );
         }
       })
@@ -36,7 +41,31 @@ export function TeamDetailsPage() {
     return () => {
       requestWasCancelled = true;
     };
-  }, [id]);
+  }, [id, refreshVersion]);
+
+  function refreshTeam(): void {
+    setMembershipError('');
+    setRefreshVersion((version) => version + 1);
+  }
+
+  async function removeMember(userId: string): Promise<void> {
+    setMembershipError('');
+    setRemovingUserId(userId);
+    try {
+      await apiRequest<void>(`/teams/${id}/members/${userId}`, {
+        method: 'DELETE',
+      });
+      refreshTeam();
+    } catch (requestError) {
+      setMembershipError(
+        requestError instanceof Error ? requestError.message : 'Unable to remove the team member',
+      );
+    } finally {
+      setRemovingUserId('');
+    }
+  }
+
+  const isSuperAdmin = user?.role === 'SUPER_ADMIN';
 
   return (
     <div className="app-shell">
@@ -68,33 +97,51 @@ export function TeamDetailsPage() {
             </header>
 
             <div className="team-details-grid">
-              <section className="panel" aria-labelledby="team-lead-title">
-                <p className="eyebrow">Leadership</p>
-                <h2 id="team-lead-title">Current lead</h2>
-                {team.lead ? (
-                  <div className="person-summary">
-                    <strong>{team.lead.name}</strong>
-                    <span>{team.lead.email}</span>
-                  </div>
-                ) : (
-                  <p className="empty-state">No lead assigned.</p>
-                )}
-              </section>
+              {isSuperAdmin ? (
+                <>
+                  <TeamLeadSelector
+                    teamId={team.id}
+                    members={team.members}
+                    currentLead={team.lead}
+                    onLeadAssigned={refreshTeam}
+                  />
+                  <TeamMemberAssignmentForm
+                    teamId={team.id}
+                    refreshVersion={refreshVersion}
+                    onMemberAdded={refreshTeam}
+                  />
+                </>
+              ) : (
+                <section className="panel" aria-labelledby="team-lead-title">
+                  <p className="eyebrow">Leadership</p>
+                  <h2 id="team-lead-title">Current lead</h2>
+                  {team.lead ? (
+                    <div className="person-summary">
+                      <strong>{team.lead.name}</strong>
+                      <span>{team.lead.email}</span>
+                    </div>
+                  ) : (
+                    <p className="empty-state">No lead assigned.</p>
+                  )}
+                </section>
+              )}
 
-              <section
-                className="panel members-panel"
-                aria-labelledby="members-title"
-              >
+              <section className="panel members-panel" aria-labelledby="members-title">
                 <div className="list-heading">
                   <div>
                     <p className="eyebrow">Membership</p>
                     <h2 id="members-title">Members</h2>
                   </div>
                   <span className="member-count">
-                    {team.memberCount}{' '}
-                    {team.memberCount === 1 ? 'member' : 'members'}
+                    {team.memberCount} {team.memberCount === 1 ? 'member' : 'members'}
                   </span>
                 </div>
+
+                {membershipError && (
+                  <p className="form-error membership-error" role="alert">
+                    {membershipError}
+                  </p>
+                )}
 
                 {team.members.length === 0 ? (
                   <p className="empty-state">This team has no members yet.</p>
@@ -106,6 +153,7 @@ export function TeamDetailsPage() {
                           <th scope="col">Name</th>
                           <th scope="col">Email</th>
                           <th scope="col">Role</th>
+                          {isSuperAdmin && <th scope="col">Action</th>}
                         </tr>
                       </thead>
                       <tbody>
@@ -114,10 +162,20 @@ export function TeamDetailsPage() {
                             <td>{member.name}</td>
                             <td>{member.email}</td>
                             <td>
-                              <span className="role-badge">
-                                {roleLabels[member.role]}
-                              </span>
+                              <span className="role-badge">{roleLabels[member.role]}</span>
                             </td>
+                            {isSuperAdmin && (
+                              <td>
+                                <button
+                                  className="danger-button"
+                                  type="button"
+                                  disabled={Boolean(removingUserId)}
+                                  onClick={() => removeMember(member.id)}
+                                >
+                                  {removingUserId === member.id ? 'Removing…' : 'Remove'}
+                                </button>
+                              </td>
+                            )}
                           </tr>
                         ))}
                       </tbody>

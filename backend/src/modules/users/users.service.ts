@@ -2,7 +2,7 @@ import bcrypt from 'bcrypt';
 import { BCRYPT_SALT_ROUNDS } from '../../common/config/constants';
 import { ConflictError } from '../../common/errors';
 import { User, UserRole } from './users.entity';
-import { UserFilter, UserRepository } from './users.repository';
+import { UserFilter, UserListRecord, UserRepository } from './users.repository';
 
 export interface CreateUserDto {
   name: string;
@@ -42,28 +42,27 @@ export class UsersService {
       email: dto.email,
       passwordHash,
       role: dto.role,
-      teamId: null,
     });
 
-    return this.toProjection(user);
+    return this.toProjection(user, null);
   }
 
   async listUsers(filter: UserFilter): Promise<UserProjection[]> {
     const users = await this.userRepository.findAll(filter);
-    return users.map((user) => this.toProjection(user));
+    return users.map((record) => this.toListProjection(record));
   }
 
-  isMemberOfTeam(userId: string, teamId: string): Promise<boolean> {
-    return this.userRepository.isMemberOfTeam(userId, teamId);
+  private toListProjection(record: UserListRecord): UserProjection {
+    return this.toProjection(record.user, record.teamId);
   }
 
-  private toProjection(user: User): UserProjection {
+  private toProjection(user: User, teamId: string | null): UserProjection {
     return {
       id: user.id,
       name: user.name,
       email: user.email,
       role: user.role,
-      teamId: user.teamId,
+      teamId,
     };
   }
 }
