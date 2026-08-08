@@ -21,7 +21,7 @@ export const menuItemsByRole: Record<UserRole, MenuItem[]> = {
   ],
   EMPLOYEE: [
     { label: "Team Goals", path: "/goals" },
-    { label: "My Tasks" },
+    { label: "My Tasks", path: "/tasks" },
     { label: "My Timesheets" },
   ],
 };

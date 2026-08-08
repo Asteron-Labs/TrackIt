@@ -294,7 +294,8 @@ textarea {
 .team-details-page,
 .goals-page,
 .goal-details-page,
-.task-details-page {
+.task-details-page,
+.my-tasks-page {
   min-width: 0;
   padding: clamp(36px, 5vw, 72px);
 }
@@ -628,6 +629,47 @@ textarea {
   gap: 6px;
 }
 
+.my-tasks-panel {
+  min-height: 260px;
+}
+
+.my-task-controls {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(180px, 1fr));
+  gap: 16px;
+  margin-bottom: 24px;
+}
+
+.my-task-controls label {
+  display: block;
+  margin: 0 0 7px;
+}
+
+.my-task-status-cell,
+.task-status-control {
+  display: grid;
+  gap: 8px;
+}
+
+.task-status-select {
+  min-width: 145px;
+  padding: 8px 10px;
+  font-size: 13px;
+}
+
+.task-status-control small {
+  color: #64736b;
+}
+
+.task-status-control .status-update-error {
+  color: #8b2020;
+  line-height: 1.4;
+}
+
+.overdue-task-row {
+  background: #fff8f8;
+}
+
 .task-status-badge,
 .task-priority-badge,
 .unassigned-label {
@@ -876,6 +918,10 @@ textarea {
   .task-metadata {
     grid-template-columns: repeat(2, minmax(150px, 1fr));
   }
+
+  .my-task-controls {
+    grid-template-columns: 1fr;
+  }
 }
 
 @media (max-width: 720px) {
@@ -904,7 +950,8 @@ textarea {
   .team-details-page,
   .goals-page,
   .goal-details-page,
-  .task-details-page {
+  .task-details-page,
+  .my-tasks-page {
     padding: 36px 20px;
   }
 

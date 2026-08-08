@@ -5,19 +5,22 @@ import type { Task, TaskResponse } from "../types/task";
 import type { TeamMember } from "../types/team";
 import { AssigneeSelect } from "./AssigneeSelect";
 import { TaskStatusBadges } from "./TaskStatusBadges";
+import { TaskStatusSelect } from "./TaskStatusSelect";
 
 interface TaskListProps {
   tasks: Task[];
   members: TeamMember[];
   canAssign: boolean;
-  onAssignmentChanged: (task: Task) => void;
+  canChangeStatus: boolean;
+  onTaskChanged: (task: Task) => void;
 }
 
 export function TaskList({
   tasks,
   members,
   canAssign,
-  onAssignmentChanged,
+  canChangeStatus,
+  onTaskChanged,
 }: TaskListProps) {
   const [savingTaskId, setSavingTaskId] = useState<string | null>(null);
   const [assignmentErrors, setAssignmentErrors] = useState<
@@ -42,7 +45,7 @@ export function TaskList({
           body: JSON.stringify({ assigneeId }),
         },
       );
-      onAssignmentChanged(response.task);
+      onTaskChanged(response.task);
     } catch (error) {
       setAssignmentErrors((currentErrors) => ({
         ...currentErrors,
@@ -79,11 +82,21 @@ export function TaskList({
                 </Link>
               </td>
               <td>
-                <TaskStatusBadges
-                  status={task.status}
-                  priority={task.priority}
-                  overdue={task.overdue}
-                />
+                <div className="my-task-status-cell">
+                  <TaskStatusBadges
+                    status={task.status}
+                    priority={task.priority}
+                    overdue={task.overdue}
+                  />
+                  {canChangeStatus && (
+                    <TaskStatusSelect
+                      taskId={task.id}
+                      taskTitle={task.title}
+                      status={task.status}
+                      onUpdated={onTaskChanged}
+                    />
+                  )}
+                </div>
               </td>
               <td>
                 <div className="task-assignment-cell">

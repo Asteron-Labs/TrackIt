@@ -10,8 +10,10 @@ import { UserRole } from '../users/users.entity';
 import { Task, TaskPriority, TaskStatus } from './tasks.entity';
 import {
   CreateTaskRecord,
+  MyTaskFilter,
   TaskAccessFilter,
   TaskRepository,
+  TaskWithGoalRecord,
   UpdateTaskRecord,
 } from './tasks.repository';
 import { isTaskOverdue, TaskService } from './tasks.service';
@@ -269,6 +271,39 @@ test('listGoalTasks scopes Employee queries to their own assignments', async () 
   assert.deepEqual(tasks[0].assignee, { id: EMPLOYEE_ID, name: 'Asha Silva' });
 });
 
+test('getMyTasks forwards server-side filters and includes the joined parent goal', async () => {
+  let receivedAssigneeId: string | undefined;
+  let receivedFilter: MyTaskFilter | undefined;
+  const record: TaskWithGoalRecord = {
+    task: storedTask({ assigneeId: EMPLOYEE_ID, dueDate: '2026-08-07' }),
+    goal: {
+      id: GOAL_ID,
+      title: 'Release TrackIt',
+      deadline: '2026-09-10',
+    },
+  };
+  const service = createService({
+    findByAssignee: async (assigneeId, filter) => {
+      receivedAssigneeId = assigneeId;
+      receivedFilter = filter;
+      return [record];
+    },
+  });
+
+  const tasks = await service.getMyTasks(EMPLOYEE_ID, {
+    status: TaskStatus.TODO,
+    dueBefore: '2026-09-01',
+  });
+
+  assert.equal(receivedAssigneeId, EMPLOYEE_ID);
+  assert.deepEqual(receivedFilter, {
+    status: TaskStatus.TODO,
+    dueBefore: '2026-09-01',
+  });
+  assert.deepEqual(tasks[0].goal, { id: GOAL_ID, title: 'Release TrackIt' });
+  assert.equal(tasks[0].overdue, true);
+});
+
 test('getTask returns 404 when the task does not exist', async () => {
   const service = createService({ findById: async () => null });
 
@@ -321,6 +356,124 @@ test('updateTask persists only editable fields for an authorized Team Lead', asy
   });
   assert.equal(task.title, 'Updated task');
   assert.equal(task.dueDatePastGoalDeadline, true);
+});
+
+test('updateStatus lets an Employee update their own assigned task', async () => {
+  let ownershipCheck: { userId: string; ownerId: string } | undefined;
+  let updatedStatus: TaskStatus | undefined;
+  const service = createService(
+    {
+      findById: async () => storedTask({ assigneeId: EMPLOYEE_ID }),
+      updateStatus: async (_taskId, status) => {
+        updatedStatus = status;
+        return storedTask({ assigneeId: null, status });
+      },
+    },
+    undefined,
+    undefined,
+    {
+      assertOwnsResource: (userId, ownerId) => {
+        ownershipCheck = { userId, ownerId };
+      },
+    },
+  );
+
+  const task = await service.updateStatus(
+    TASK_ID,
+    TaskStatus.IN_PROGRESS,
+    caller(UserRole.EMPLOYEE, EMPLOYEE_ID),
+  );
+
+  assert.deepEqual(ownershipCheck, { userId: EMPLOYEE_ID, ownerId: EMPLOYEE_ID });
+  assert.equal(updatedStatus, TaskStatus.IN_PROGRESS);
+  assert.equal(task.status, TaskStatus.IN_PROGRESS);
+});
+
+test("updateStatus rejects an Employee changing another employee's task", async () => {
+  let updateWasCalled = false;
+  const service = createService(
+    {
+      findById: async () => storedTask({ assigneeId: OTHER_EMPLOYEE_ID }),
+      updateStatus: async () => {
+        updateWasCalled = true;
+        return storedTask();
+      },
+    },
+    undefined,
+    undefined,
+    {
+      assertOwnsResource: () => {
+        throw new ForbiddenError('You can only update your own tasks');
+      },
+    },
+  );
+
+  await assert.rejects(
+    () =>
+      service.updateStatus(
+        TASK_ID,
+        TaskStatus.DONE,
+        caller(UserRole.EMPLOYEE, EMPLOYEE_ID),
+      ),
+    (error: unknown) => error instanceof ForbiddenError,
+  );
+  assert.equal(updateWasCalled, false);
+});
+
+for (const role of [UserRole.TEAM_LEAD, UserRole.SUPER_ADMIN]) {
+  test(`updateStatus lets ${role} update an authorized task`, async () => {
+    let goalCaller: AuthenticatedUser | undefined;
+    const service = createService(
+      {
+        findById: async () => storedTask({ assigneeId: OTHER_EMPLOYEE_ID }),
+        updateStatus: async (_taskId, status) => storedTask({ assigneeId: null, status }),
+      },
+      {
+        getGoal: async (_goalId, receivedCaller) => {
+          goalCaller = receivedCaller;
+          return goalProjection();
+        },
+      },
+    );
+
+    const task = await service.updateStatus(TASK_ID, TaskStatus.BLOCKED, caller(role));
+
+    assert.equal(goalCaller?.role, role);
+    assert.equal(task.status, TaskStatus.BLOCKED);
+  });
+}
+
+test('updateStatus rejects a Team Lead outside the task team without persisting', async () => {
+  let updateWasCalled = false;
+  const service = createService(
+    {
+      findById: async () => storedTask(),
+      updateStatus: async () => {
+        updateWasCalled = true;
+        return storedTask();
+      },
+    },
+    {
+      getGoal: async () => {
+        throw new ForbiddenError('You do not have access to this goal');
+      },
+    },
+  );
+
+  await assert.rejects(
+    () => service.updateStatus(TASK_ID, TaskStatus.DONE, caller(UserRole.TEAM_LEAD)),
+    (error: unknown) => error instanceof ForbiddenError,
+  );
+  assert.equal(updateWasCalled, false);
+});
+
+test('updateStatus returns 404 when the task does not exist', async () => {
+  const service = createService({ findById: async () => null });
+
+  await assert.rejects(
+    () => service.updateStatus(TASK_ID, TaskStatus.DONE, caller(UserRole.EMPLOYEE)),
+    (error: unknown) => error instanceof NotFoundError,
+  );
 });
 
 test('assignTask reassigns a task to a member of the owning team', async () => {

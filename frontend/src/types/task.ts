@@ -33,3 +33,22 @@ export interface TasksResponse {
 export interface TaskResponse {
   task: Task;
 }
+
+export interface MyTask {
+  id: string;
+  goalId: string;
+  title: string;
+  status: TaskStatus;
+  priority: TaskPriority;
+  estimatedHours: number;
+  dueDate: string;
+  overdue: boolean;
+  goal: {
+    id: string;
+    title: string;
+  };
+}
+
+export interface MyTasksResponse {
+  tasks: MyTask[];
+}
