@@ -1,20 +1,23 @@
 import { Router } from 'express';
 import { AppDataSource } from '../data-source';
+import { HealthRepository } from './health.repository';
+import { HealthService } from './health.service';
 
 /**
- * Liveness + database connectivity check. This proves the full stack from route to
- * database, so it deliberately hits the database rather than reporting a static OK.
+ * GET /health — proves the full stack from route to database, flowing
+ * controller -> service -> repository -> database.
  *
- * Health is infrastructure, not a domain module, so it does not follow the
- * controller/service/repository/entity layering.
+ * Health is infrastructure, not a domain module, but it deliberately follows the same layering
+ * so this story demonstrates the convention (including a service receiving its repository by
+ * constructor injection). Dependencies are wired here by hand — no DI container.
+ *
+ * Returns 200 when the database is reachable, 503 when it is not.
  */
+const healthService = new HealthService(new HealthRepository(AppDataSource));
+
 export const healthRouter = Router();
 
 healthRouter.get('/health', async (_req, res) => {
-  try {
-    await AppDataSource.query('SELECT 1');
-    res.status(200).json({ status: 'ok', database: 'up' });
-  } catch {
-    res.status(503).json({ status: 'error', database: 'down' });
-  }
+  const status = await healthService.getStatus();
+  res.status(status.database === 'up' ? 200 : 503).json(status);
 });

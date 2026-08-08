@@ -17,11 +17,35 @@ for the engineering rules.
 | Auth       | JWT _(from TRACKIT-13 onward)_      |
 | Dev        | Docker Compose                      |
 
-The backend is a modular monolith. Each module has four layers —
-`controller → service → repository → entity` — under `backend/src/modules/`.
-
 > The frontend (React + TypeScript) is scaffolded in a later step and is not yet part of
 > this repository or the Compose stack.
+
+## Architecture — the four-layer convention
+
+The backend is a modular monolith. Every domain module lives under `backend/src/modules/<module>/`
+and has exactly four layers, each in its own file:
+
+| File | Layer | Responsibility |
+| --- | --- | --- |
+| `<module>.controller.ts` | Controller | HTTP: routing, request/response, **Zod validation** at the boundary |
+| `<module>.service.ts` | Service | Business logic, **authorisation**, orchestration |
+| `<module>.repository.ts` | Repository | Data access — the only layer that touches TypeORM |
+| `<module>.entity.ts` | Entity | TypeORM entity definition (no logic) |
+
+Rules that keep the layers honest (see `AGENTS.md` for the full set):
+
+- **Controllers never import repositories.** They call services.
+- **Services receive their repository by constructor injection** and never see the `DataSource`.
+- **Validation is a controller concern** (Zod); **authorisation is a service concern**.
+- Cross-module reads go through the other module's **service**, never its repository.
+
+The `GET /health` endpoint under `backend/src/health/` demonstrates the flow end to end —
+`controller → service → repository → database` — even though, as a liveness probe, it has no
+entity of its own. Entity-backed module repositories extend the shared
+`backend/src/common/repository/base.repository.ts`.
+
+The eight module folders (`auth`, `users`, `teams`, `goals`, `tasks`, `timesheets`,
+`dashboards`, `audit`) are committed empty; each story fills in its own module.
 
 ## Prerequisites
 
